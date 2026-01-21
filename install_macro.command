@@ -2,7 +2,7 @@
 
 # -------------------------------
 # Fuzzy Macro Installer
-# macOS 13+ / Apple Silicon (M1–M4)
+# macOS 10.12+ / Intel or Apple Silicon (M1–M4)
 # -------------------------------
 
 # GUI helper
@@ -13,30 +13,45 @@ gui() {
 # --- REQUIREMENTS CHECK ---
 gui "Welcome to the Fuzzy Macro installer.\n\nClick Continue to run compatibility checks."
 
-# macOS version
-macos_major=$(sw_vers -productVersion | cut -d. -f1)
-if [[ "$macos_major" -lt 13 ]]; then
-    osascript -e 'display dialog "This installer requires macOS 13 or later." buttons {"OK"}'
+# macOS version (require 10.12+)
+product_version=$(sw_vers -productVersion)
+major=$(echo "$product_version" | cut -d. -f1)
+minor=$(echo "$product_version" | cut -d. -f2)
+if [[ "$major" -ge 11 ]] || { [[ "$major" -eq 10 ]] && [[ -n "$minor" ]] && [[ "$minor" -ge 12 ]]; }; then
+    : # macOS version OK (10.12+ or 11+)
+else
+    osascript -e 'display dialog "This installer requires macOS 10.12 or later." buttons {"OK"}'
     exit 1
 fi
 
-# Apple Silicon check
-chip=$(sysctl -n machdep.cpu.brand_string)
-if [[ "$chip" != *"Apple"* ]]; then
-    osascript -e 'display dialog "This installer requires an Apple Silicon Mac (M1–M4)." buttons {"OK"}'
-    exit 1
+# Detect architecture (Intel or Apple Silicon)
+arch=$(uname -m)
+if [[ "$arch" == "arm64" ]]; then
+    ARCH="arm64"
+    gui "Detected Apple Silicon (arm64)."
+else
+    ARCH="x86_64"
+    gui "Detected Intel (x86_64)."
 fi
 
 # --- PYTHON CHECK ---
 gui "Checking for Python 3..."
 
 if ! command -v python3 >/dev/null 2>&1; then
-    gui "Python 3 is not installed. The installer will now download and install Python from python.org."
+    gui "Python 3 is not installed. The installer will attempt to provide a suitable installer from python.org."
 
-    PYTHON_PKG="python-latest.pkg"
-    curl -L -o "$PYTHON_PKG" "https://www.python.org/ftp/python/3.12.2/python-3.12.2-macos11.pkg"
-    sudo installer -pkg "$PYTHON_PKG" -target /
-    rm "$PYTHON_PKG"
+    # For macOS 11+ we can use the macos11 universal installer; older 10.12-10.15 systems
+    # may not be compatible with the latest python.org pkg. In that case open the downloads page
+    # so the user can choose a compatible build.
+    if [[ "$major" -ge 11 ]]; then
+        PYTHON_PKG="python-latest.pkg"
+        curl -L -o "$PYTHON_PKG" "https://www.python.org/ftp/python/3.12.2/python-3.12.2-macos11.pkg"
+        sudo installer -pkg "$PYTHON_PKG" -target /
+        rm "$PYTHON_PKG"
+    else
+        gui "Automatic installer not available for your macOS version. A browser window will open to python.org; please download a Python 3 installer compatible with macOS 10.12+ (for example, a 3.8/3.9 build)."
+        open "https://www.python.org/downloads/macos/"
+    fi
 else
     gui "Python 3 is already installed."
 fi
