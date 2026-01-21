@@ -40,17 +40,18 @@ gui "Checking for Python 3..."
 if ! command -v python3 >/dev/null 2>&1; then
     gui "Python 3 is not installed. The installer will attempt to provide a suitable installer from python.org."
 
-    # For macOS 11+ we can use the macos11 universal installer; older 10.12-10.15 systems
-    # may not be compatible with the latest python.org pkg. In that case open the downloads page
-    # so the user can choose a compatible build.
+    # For macOS 11+ we use the macos11 universal installer; older 10.12-10.15 systems
+    # use the macosx10.9 compatible installer.
     if [[ "$major" -ge 11 ]]; then
         PYTHON_PKG="python-latest.pkg"
         curl -L -o "$PYTHON_PKG" "https://www.python.org/ftp/python/3.9.8/python-3.9.8-macos11.pkg"
         sudo installer -pkg "$PYTHON_PKG" -target /
         rm "$PYTHON_PKG"
     else
-        gui "Automatic installer not available for your macOS version. A browser window will open to python.org; please download a Python 3 installer compatible with macOS 10.12+ (for example, a 3.8/3.9 build)."
-        open "https://www.python.org/downloads/macos/"
+        PYTHON_PKG="python-latest.pkg"
+        curl -L -o "$PYTHON_PKG" "https://www.python.org/ftp/python/3.9.8/python-3.9.8-macosx10.9.pkg"
+        sudo installer -pkg "$PYTHON_PKG" -target /
+        rm "$PYTHON_PKG"
     fi
 else
     gui "Python 3 is already installed."
