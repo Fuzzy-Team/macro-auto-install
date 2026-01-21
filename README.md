@@ -4,13 +4,18 @@ To do so, open Terminal and paste this command:
 
 Command:
 ```
-/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Fuzzy-Team/macro-auto-install/refs/heads/main/install_macro.command)"
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Fuzzy-Team/macro-auto-install/refs/heads/main/fuzzy_installer.command)"
 ```
 
 This installer has been tested and works on Macos 26.2 M4 chip.
 
 In theory it should work with:
 
-Macos 10.12+
-All Mx chips
-All Macs with an intel chip and Macos 10.12+
+- Macos 10.12+
+- All Mx chips
+- All Macs with an intel chip and Macos 10.12+
+
+
+Installer Source Code: https://github.com/Fuzzy-Team/macro-auto-install/blob/main/fuzzy_installer.command
+ - Installer also runs this: https://github.com/Fuzzy-Team/Fuzzy-Macro/blob/main/install_dependencies.command
+Macro Source Code: https://github.com/Fuzzy-Team/Fuzzy-Macro/tree/main
