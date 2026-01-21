@@ -45,7 +45,7 @@ if ! command -v python3 >/dev/null 2>&1; then
     # so the user can choose a compatible build.
     if [[ "$major" -ge 11 ]]; then
         PYTHON_PKG="python-latest.pkg"
-        curl -L -o "$PYTHON_PKG" "https://www.python.org/ftp/python/3.12.2/python-3.12.2-macos11.pkg"
+        curl -L -o "$PYTHON_PKG" "https://www.python.org/ftp/python/3.9.8/python-3.9.8-macos11.pkg"
         sudo installer -pkg "$PYTHON_PKG" -target /
         rm "$PYTHON_PKG"
     else
