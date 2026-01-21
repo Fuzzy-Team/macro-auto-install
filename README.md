@@ -1,5 +1,6 @@
-# macro-auto-install
-A 1 line command to guide users through installing Fuzzy Macro.
+# How to install Fuzzy Macro
+
+To do so, open Terminal and paste this command:
 
 Command:
 ```
