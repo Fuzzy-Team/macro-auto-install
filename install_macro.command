@@ -59,7 +59,7 @@ fi
 # --- INSTALLER VENV SCRIPT ---
 gui "Running virtual environment setup..."
 
-bash -c "$(curl -fsSL https://raw.githubusercontent.com/existancepy/bss-macro-py-easy-install/refs/heads/main/virtual-env-install)"
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/Fuzzy-Team/Fuzzy-Macro/refs/heads/main/install_macro.command)"
 
 # --- DOWNLOAD MACRO ZIP ---
 gui "Downloading the Fuzzy Macro package..."
@@ -99,20 +99,6 @@ open -a Terminal "$REAL_CMD"
 EOF
 
 chmod +x "$WRAPPER"
-
-# --- CHECK / INSTALL CHROME ---
-if [ -d "/Applications/Google Chrome.app" ]; then
-    gui "Google Chrome is already installed. Skipping Chrome installation."
-else
-    gui "Google Chrome is not installed. The installer will download and install it."
-
-    dmg="/tmp/chrome.dmg"
-    curl -L -o "$dmg" "https://dl.google.com/chrome/mac/stable/GGRO/googlechrome.dmg"
-    hdiutil mount "$dmg"
-    sudo cp -r "/Volumes/Google Chrome/Google Chrome.app" /Applications/
-    hdiutil unmount "/Volumes/Google Chrome"
-    rm "$dmg"
-fi
 
 # --- DISPLAY COLOR PROFILE ---
 gui "Setting your display color profile to sRGB IEC61966-2.1..."
