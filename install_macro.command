@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # -------------------------------
-# Existance Macro Installer
+# Fuzzy Macro Installer
 # macOS 13+ / Apple Silicon (M1–M4)
 # -------------------------------
 
@@ -11,7 +11,7 @@ gui() {
 }
 
 # --- REQUIREMENTS CHECK ---
-gui "Welcome to the Existance Macro installer.\n\nClick Continue to run compatibility checks."
+gui "Welcome to the Fuzzy Macro installer.\n\nClick Continue to run compatibility checks."
 
 # macOS version
 macos_major=$(sw_vers -productVersion | cut -d. -f1)
@@ -47,22 +47,22 @@ gui "Running virtual environment setup..."
 bash -c "$(curl -fsSL https://raw.githubusercontent.com/existancepy/bss-macro-py-easy-install/refs/heads/main/virtual-env-install)"
 
 # --- DOWNLOAD MACRO ZIP ---
-gui "Downloading the Existance Macro package..."
+gui "Downloading the Fuzzy Macro package..."
 
-TMP_ZIP="/tmp/existance_macro.zip"
-curl -L -o "$TMP_ZIP" "https://github.com/existancepy/bss-macro-py/archive/refs/heads/main.zip"
+TMP_ZIP="/tmp/fuzzy_macro.zip"
+curl -L -o "$TMP_ZIP" "https://github.com/Fuzzy-Team/Fuzzy-Macro/archive/refs/heads/main.zip"
 
 # --- SETUP USER FOLDER ---
-gui "Installing Existance Macro into your home folder..."
+gui "Installing Fuzzy Macro into your home folder..."
 
-APP_DIR="$HOME/Existance Macro"
+APP_DIR="$HOME/Fuzzy Macro"
 rm -rf "$APP_DIR"
 mkdir -p "$APP_DIR"
 unzip -o "$TMP_ZIP" -d "$APP_DIR"
 rm "$TMP_ZIP"
 
 # Move inner folder up one level
-inner=$(find "$APP_DIR" -maxdepth 1 -type d -name "bss-macro-py-main")
+inner=$(find "$APP_DIR" -maxdepth 1 -type d -name "Fuzzy-Macro-main")
 mv "$inner"/* "$APP_DIR"
 rm -rf "$inner"
 
@@ -71,10 +71,10 @@ xattr -dr com.apple.quarantine "$APP_DIR"
 chmod -R +x "$APP_DIR"
 
 # --- DESKTOP SHORTCUT (Wrapper Script) ---
-gui "Creating a desktop shortcut for Existance Macro..."
+gui "Creating a desktop shortcut for Fuzzy Macro..."
 
-WRAPPER="$HOME/Desktop/Existance Macro Shortcut.command"
-REAL_CMD="$APP_DIR/e_macro.command"
+WRAPPER="$HOME/Desktop/Fuzzy Macro Shortcut.command"
+REAL_CMD="$APP_DIR/run_macro.command"
 
 cat > "$WRAPPER" <<EOF
 #!/bin/bash
