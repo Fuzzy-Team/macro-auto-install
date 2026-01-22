@@ -16,7 +16,7 @@ In theory it should work with:
 - All Macs with an intel chip and Macos 10.12+
 
 
-Installer Source Code: https://github.com/Fuzzy-Team/macro-auto-install/blob/main/fuzzy_installer.command
- - Installer also runs this: https://github.com/Fuzzy-Team/Fuzzy-Macro/blob/main/install_dependencies.command
+Installer Source Code: https://github.com/Fuzzy-Team/macro-auto-install/
+ - Installer also runs this command from the Fuzzy-Macro repo: https://github.com/Fuzzy-Team/Fuzzy-Macro/blob/main/install_dependencies.command
 
 Macro Source Code: https://github.com/Fuzzy-Team/Fuzzy-Macro/tree/main
