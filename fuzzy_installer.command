@@ -59,7 +59,7 @@ fi
 # --- INSTALLER VENV SCRIPT ---
 gui "Running virtual environment setup..."
 
-bash -c "$(curl -fsSL https://github.com/Fuzzy-Team/Fuzzy-Macro/blob/main/install_dependencies.command)"
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/Fuzzy-Team/Fuzzy-Macro/refs/heads/main/install_dependencies.command)"
 
 # --- DOWNLOAD MACRO ZIP ---
 gui "Downloading the Fuzzy Macro package..."
