@@ -3,7 +3,7 @@
 # -------------------------------
 # Existance to Fuzzy Macro Migration Script
 # macOS 10.12+ / Intel or Apple Silicon (M1–M4)
-# This script is untested so please keep that in mind.
+# Note: This script is untested and is not advised at this current time.
 # -------------------------------
 
 # GUI helper
@@ -63,6 +63,7 @@ if [[ -d "$SCRIPT_DIR/settings/profiles" ]]; then
     gui "Profiles backed up to:\n$BACKUP_DIR"
 else
     gui "No profiles folder found. Skipping backup."
+    BACKUP_DIR=""
 fi
 
 # --- DOWNLOAD FUZZY MACRO ---
@@ -109,7 +110,7 @@ if [[ -d "$SCRIPT_DIR/settings/profiles" ]]; then
 fi
 
 # Delete all files except settings folder
-find "$SCRIPT_DIR" -mindepth 1 -maxdepth 1 !  -name "settings" !  -name "settings_backup_*" -exec rm -rf {} +
+find "$SCRIPT_DIR" -mindepth 1 -maxdepth 1 !  -name "settings" ! -name "settings_backup_*" -exec rm -rf {} +
 
 # Copy all Fuzzy Macro files
 cp -R "$EXTRACTED_FOLDER"/* "$SCRIPT_DIR/"
@@ -145,7 +146,43 @@ else
     gui_ok "WARNING: install_dependencies.command not found.\n\nPlease run it manually from the Fuzzy Macro folder."
 fi
 
+# --- CLEANUP OPTIONS ---
+# Ask about deleting backup
+if [[ -n "$BACKUP_DIR" ]] && [[ -d "$BACKUP_DIR" ]]; then
+    if gui_yes_no "Migration complete! ✓\n\nDo you want to delete the backup folder?\n\n$BACKUP_DIR\n\n(Your profiles are already restored in the settings folder)"; then
+        rm -rf "$BACKUP_DIR"
+        gui "Backup folder deleted."
+    else
+        gui "Backup folder kept at:\n$BACKUP_DIR"
+    fi
+fi
+
+# Ask about deleting migration script
+if gui_yes_no "Do you want to delete this migration script?\n\n$MIGRATION_SCRIPT\n\n(You won't need it anymore since migration is complete)"; then
+    # Use a separate script to delete this file after it exits
+    CLEANUP_SCRIPT="/tmp/cleanup_migration. sh"
+    cat > "$CLEANUP_SCRIPT" <<EOF
+#!/bin/bash
+sleep 1
+rm -f "$MIGRATION_SCRIPT"
+rm -f "$CLEANUP_SCRIPT"
+EOF
+    chmod +x "$CLEANUP_SCRIPT"
+    nohup "$CLEANUP_SCRIPT" &>/dev/null &
+    gui "Migration script will be deleted shortly."
+else
+    gui "Migration script kept at:\n$MIGRATION_SCRIPT"
+fi
+
 # --- COMPLETION ---
-gui_ok "Migration complete!  ✓\n\nYour Existance Macro folder has been converted to Fuzzy Macro.\n\nYour profiles are preserved in:\n$SCRIPT_DIR/settings/profiles\n\nA backup was also saved to:\n$BACKUP_DIR\n\nYou can now run Fuzzy Macro!"
+FINAL_MSG="Migration complete!  ✓\n\nYour Existance Macro folder has been converted to Fuzzy Macro.\n\nYour profiles are preserved in:\n$SCRIPT_DIR/settings/profiles"
+
+if [[ -n "$BACKUP_DIR" ]] && [[ -d "$BACKUP_DIR" ]]; then
+    FINAL_MSG="$FINAL_MSG\n\nBackup location:\n$BACKUP_DIR"
+fi
+
+FINAL_MSG="$FINAL_MSG\n\nYou can now run Fuzzy Macro!"
+
+gui_ok "$FINAL_MSG"
 
 exit 0
