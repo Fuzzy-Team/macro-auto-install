@@ -12,7 +12,7 @@ This installer has been tested and works on Macos 26.2 M4 chip.
 In theory it should work with:
 
 - Macos 10.12+
-- All Mx chips
+- All M1-4 chips
 - All Macs with an intel chip and Macos 10.12+
 
 
