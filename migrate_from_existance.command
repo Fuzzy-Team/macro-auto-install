@@ -90,7 +90,7 @@ rm "$TMP_ZIP"
 EXTRACTED_FOLDER=$(find "$TMP_EXTRACT" -maxdepth 1 -type d -name "Fuzzy-Macro-main" | head -n 1)
 
 if [[ -z "$EXTRACTED_FOLDER" ]]; then
-    gui_ok "ERROR: Could not find extracted Fuzzy Macro folder."
+    gui_ok "ERROR:  Could not find extracted Fuzzy Macro folder."
     exit 1
 fi
 
@@ -128,7 +128,7 @@ cp "$TMP_MIGRATION" "$SCRIPT_DIR/migrate_from_existance.command"
 chmod +x "$SCRIPT_DIR/migrate_from_existance.command"
 rm "$TMP_MIGRATION"
 
-# Cleanup
+# Cleanup temp extract folder
 rm -rf "$TMP_EXTRACT"
 
 # Remove quarantine attributes
@@ -158,20 +158,41 @@ if [[ -n "$BACKUP_DIR" ]] && [[ -d "$BACKUP_DIR" ]]; then
 fi
 
 # Ask about deleting migration script
+DELETE_MIGRATION=false
 if gui_yes_no "Do you want to delete this migration script?\n\n$MIGRATION_SCRIPT\n\n(You won't need it anymore since migration is complete)"; then
-    # Use a separate script to delete this file after it exits
-    CLEANUP_SCRIPT="/tmp/cleanup_migration. sh"
+    DELETE_MIGRATION=true
+    gui "Migration script will be deleted."
+else
+    gui "Migration script kept at:\n$MIGRATION_SCRIPT"
+fi
+
+# --- CLEANUP ALL TEMPORARY FILES ---
+gui "Cleaning up temporary files..."
+
+# Remove any remaining temp files from this migration
+rm -f "$TMP_ZIP" 2>/dev/null
+rm -rf "$TMP_EXTRACT" 2>/dev/null
+rm -rf "$TMP_PROFILES" 2>/dev/null
+rm -f "$TMP_MIGRATION" 2>/dev/null
+
+# Clean up any leftover fuzzy macro migration files
+rm -f /tmp/fuzzy_macro_migration*. zip 2>/dev/null
+rm -rf /tmp/fuzzy_macro_extract* 2>/dev/null
+rm -rf /tmp/profiles_temp* 2>/dev/null
+rm -f /tmp/migrate_from_existance_temp*.command 2>/dev/null
+
+# If user wants to delete migration script, do it via cleanup script
+if [ "$DELETE_MIGRATION" = true ]; then
+    CLEANUP_SCRIPT="/tmp/cleanup_migration_$(date +%s).sh"
     cat > "$CLEANUP_SCRIPT" <<EOF
 #!/bin/bash
-sleep 1
+sleep 2
 rm -f "$MIGRATION_SCRIPT"
 rm -f "$CLEANUP_SCRIPT"
+rm -f /tmp/cleanup_migration_*. sh 2>/dev/null
 EOF
     chmod +x "$CLEANUP_SCRIPT"
     nohup "$CLEANUP_SCRIPT" &>/dev/null &
-    gui "Migration script will be deleted shortly."
-else
-    gui "Migration script kept at:\n$MIGRATION_SCRIPT"
 fi
 
 # --- COMPLETION ---
@@ -181,7 +202,7 @@ if [[ -n "$BACKUP_DIR" ]] && [[ -d "$BACKUP_DIR" ]]; then
     FINAL_MSG="$FINAL_MSG\n\nBackup location:\n$BACKUP_DIR"
 fi
 
-FINAL_MSG="$FINAL_MSG\n\nYou can now run Fuzzy Macro!"
+FINAL_MSG="$FINAL_MSG\n\nAll temporary files have been cleaned up.\n\nYou can now run Fuzzy Macro!"
 
 gui_ok "$FINAL_MSG"
 
