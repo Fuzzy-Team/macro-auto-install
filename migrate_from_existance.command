@@ -53,16 +53,24 @@ else
     exit 1
 fi
 
-# --- BACKUP PROFILES ---
-gui "Backing up your profiles..."
+# --- BACKUP PROFILES AND PATTERNS ---
+gui "Backing up your profiles and patterns..."
 
 BACKUP_DIR="$SCRIPT_DIR/settings_backup_$(date +%Y%m%d_%H%M%S)"
+mkdir -p "$BACKUP_DIR"
+COPIED_ANY=false
 if [[ -d "$SCRIPT_DIR/settings/profiles" ]]; then
-    mkdir -p "$BACKUP_DIR"
-    cp -R "$SCRIPT_DIR/settings/profiles" "$BACKUP_DIR/"
-    gui "Profiles backed up to:\n$BACKUP_DIR"
+    cp -R "$SCRIPT_DIR/settings/profiles" "$BACKUP_DIR/profiles"
+    COPIED_ANY=true
+fi
+if [[ -d "$SCRIPT_DIR/settings/patterns" ]]; then
+    cp -R "$SCRIPT_DIR/settings/patterns" "$BACKUP_DIR/patterns"
+    COPIED_ANY=true
+fi
+if [ "$COPIED_ANY" = true ]; then
+    gui "Settings backed up to:\n$BACKUP_DIR"
 else
-    gui "No profiles folder found. Skipping backup."
+    gui "No profiles or patterns folder found. Skipping backup."
     BACKUP_DIR=""
 fi
 
@@ -109,6 +117,14 @@ if [[ -d "$SCRIPT_DIR/settings/profiles" ]]; then
     cp -R "$SCRIPT_DIR/settings/profiles" "$TMP_PROFILES"
 fi
 
+# Save settings/patterns temporarily (for merging)
+TMP_PATTERNS="/tmp/patterns_temp"
+rm -rf "$TMP_PATTERNS"
+if [[ -d "$SCRIPT_DIR/settings/patterns" ]]; then
+    mkdir -p "$TMP_PATTERNS"
+    cp -R "$SCRIPT_DIR/settings/patterns" "$TMP_PATTERNS/"
+fi
+
 # Save src/data temporarily
 TMP_DATA="/tmp/src_data_temp"
 rm -rf "$TMP_DATA"
@@ -137,6 +153,23 @@ if [[ -d "$TMP_DATA" ]]; then
     cp -R "$TMP_DATA/data" "$SCRIPT_DIR/src/"
     rm -rf "$TMP_DATA"
     gui "Your src/data folder has been restored."
+fi
+
+# Restore and merge settings/patterns
+if [[ -d "$TMP_PATTERNS" ]]; then
+    mkdir -p "$SCRIPT_DIR/settings/patterns"
+    MERGE_TS=$(date +%Y%m%d_%H%M%S)
+    for src in "$TMP_PATTERNS"/*; do
+        name=$(basename "$src")
+        dest="$SCRIPT_DIR/settings/patterns/$name"
+        if [[ ! -e "$dest" ]]; then
+            cp -R "$src" "$dest"
+        else
+            cp -R "$src" "$dest.from_existance_$MERGE_TS"
+        fi
+    done
+    rm -rf "$TMP_PATTERNS"
+    gui "Your settings/patterns folder has been merged (existing files preserved)."
 fi
 
 # Restore migration script
@@ -196,6 +229,7 @@ rm -f /tmp/fuzzy_macro_migration*. zip 2>/dev/null
 rm -rf /tmp/fuzzy_macro_extract* 2>/dev/null
 rm -rf /tmp/profiles_temp* 2>/dev/null
 rm -rf /tmp/src_data_temp* 2>/dev/null
+rm -rf /tmp/patterns_temp* 2>/dev/null
 rm -f /tmp/migrate_from_existance_temp*.command 2>/dev/null
 
 # If user wants to delete migration script, do it via cleanup script
