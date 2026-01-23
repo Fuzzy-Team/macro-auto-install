@@ -109,6 +109,14 @@ if [[ -d "$SCRIPT_DIR/settings/profiles" ]]; then
     cp -R "$SCRIPT_DIR/settings/profiles" "$TMP_PROFILES"
 fi
 
+# Save src/data temporarily
+TMP_DATA="/tmp/src_data_temp"
+rm -rf "$TMP_DATA"
+if [[ -d "$SCRIPT_DIR/src/data" ]]; then
+    mkdir -p "$TMP_DATA"
+    cp -R "$SCRIPT_DIR/src/data" "$TMP_DATA/"
+fi
+
 # Delete all files except settings folder
 find "$SCRIPT_DIR" -mindepth 1 -maxdepth 1 !  -name "settings" ! -name "settings_backup_*" -exec rm -rf {} +
 
@@ -121,6 +129,14 @@ if [[ -d "$TMP_PROFILES" ]]; then
     cp -R "$TMP_PROFILES" "$SCRIPT_DIR/settings/"
     rm -rf "$TMP_PROFILES"
     gui "Your profiles have been restored."
+fi
+
+# Restore src/data
+if [[ -d "$TMP_DATA" ]]; then
+    mkdir -p "$SCRIPT_DIR/src"
+    cp -R "$TMP_DATA/data" "$SCRIPT_DIR/src/"
+    rm -rf "$TMP_DATA"
+    gui "Your src/data folder has been restored."
 fi
 
 # Restore migration script
@@ -179,6 +195,7 @@ rm -f "$TMP_MIGRATION" 2>/dev/null
 rm -f /tmp/fuzzy_macro_migration*. zip 2>/dev/null
 rm -rf /tmp/fuzzy_macro_extract* 2>/dev/null
 rm -rf /tmp/profiles_temp* 2>/dev/null
+rm -rf /tmp/src_data_temp* 2>/dev/null
 rm -f /tmp/migrate_from_existance_temp*.command 2>/dev/null
 
 # If user wants to delete migration script, do it via cleanup script
