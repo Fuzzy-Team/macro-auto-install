@@ -1,11 +1,7 @@
 # How to install Fuzzy Macro
 
-To do so, open Terminal and paste this command:
-
-Command:
-```
-/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Fuzzy-Team/macro-auto-install/refs/heads/main/fuzzy_installer.command)"
-```
+## **WAIT**, before proceeding please note that this is not the up to date way to install the macro, please refer to the documentation below:
+https://fuzzy-team.gitbook.io/fuzzy-macro
 
 This installer has been tested and works on Macos 26.2 M4 chip.
 
