@@ -1,260 +1,212 @@
 #!/bin/bash
 
-# -------------------------------
-# Existance to Fuzzy Macro Migration Script
-# macOS 10.12+ / Intel or Apple Silicon (M1–M4)
+# ---------------------------------------------
+# Existance → Fuzzy Macro Migration Script
+# macOS 10.12+ / Intel or Apple Silicon
 # Note: This script is untested and is not advised at this current time.
-# -------------------------------
+# ---------------------------------------------
 
-# GUI helper
+set -euo pipefail
+IFS=$'\n\t'
+
+# ---------- GUI HELPERS ----------
+
 gui() {
-    osascript -e "display dialog \"$1\" buttons {\"Continue\"} default button \"Continue\""
+    osascript <<EOF
+display dialog "$1" buttons {"Continue"} default button "Continue"
+EOF
 }
 
 gui_yes_no() {
-    result=$(osascript -e "display dialog \"$1\" buttons {\"Yes\", \"No\"} default button \"Yes\"" 2>&1)
-    if echo "$result" | grep -q "Yes"; then
-        return 0
-    else
-        return 1
-    fi
+    osascript <<EOF >/dev/null
+display dialog "$1" buttons {"Yes", "No"} default button "Yes"
+EOF
 }
 
 gui_ok() {
-    osascript -e "display dialog \"$1\" buttons {\"OK\"} default button \"OK\""
+    osascript <<EOF
+display dialog "$1" buttons {"OK"} default button "OK"
+EOF
 }
 
-# --- WELCOME ---
-gui "Welcome to the Existance → Fuzzy Macro Migration Tool.\n\nThis script will help you migrate your settings from Existance Macro to Fuzzy Macro.\n\nClick Continue to begin."
+# ---------- WELCOME ----------
 
-# --- ASK ABOUT UNINSTALLING EXISTANCE ---
-if gui_yes_no "Do you want to uninstall the Existance Macro virtual environment?\n\nThis will delete the 'bss-macro-env' folder.\n\n(Your profiles will be preserved)"; then
-    gui "Removing Existance Macro virtual environment..."
+gui "Welcome to the Existance → Fuzzy Macro Migration Tool.
+
+This script will migrate your Existance Macro install to Fuzzy Macro.
+
+A backup will be created before any changes."
+
+# ---------- UNINSTALL OLD VENV ----------
+
+if gui_yes_no "Do you want to uninstall the Existance Macro virtual environment?
+
+This removes:
+~/bss-macro-env
+
+(Profiles are preserved)"; then
     rm -rf "$HOME/bss-macro-env"
     gui "Existance virtual environment removed."
 else
-    gui "Keeping Existance virtual environment intact."
+    gui "Keeping Existance virtual environment."
 fi
 
-# --- CHECK IF SCRIPT IS IN EXISTANCE FOLDER ---
+# ---------- SCRIPT LOCATION ----------
+
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+MIGRATION_SCRIPT="$(realpath "$0")"
 
-# Look for indicators that this is the Existance Macro folder
-# (Check for common files/folders that would be in Existance Macro)
+# ---------- SAFETY CHECKS ----------
+
+if [[ -z "$SCRIPT_DIR" || "$SCRIPT_DIR" == "/" ]]; then
+    gui_ok "ERROR: Unsafe script directory detected. Aborting."
+    exit 1
+fi
+
 if [[ ! -d "$SCRIPT_DIR/settings" ]]; then
-    gui_ok "ERROR: This script must be placed in your Existance Macro folder.\n\nPlease move this file into your Existance Macro directory and run it again."
+    gui_ok "ERROR: This script must be run from the Existance Macro folder.
+
+Missing: settings/"
     exit 1
 fi
 
-if gui_yes_no "Is this file currently in your Existance Macro folder?\n\nCurrent location:\n$SCRIPT_DIR"; then
-    gui "Great!  Continuing with migration..."
-else
-    gui_ok "Please move this file into your Existance Macro folder and run it again."
+if ! gui_yes_no "Confirm script location:
+
+$SCRIPT_DIR
+
+Is this your Existance Macro folder?"; then
+    gui_ok "Move the script into the Existance Macro folder and try again."
     exit 1
 fi
 
-# --- BACKUP PROFILES AND PATTERNS ---
-gui "Backing up your profiles and patterns..."
+# ---------- BACKUP ----------
 
 BACKUP_DIR="$SCRIPT_DIR/settings_backup_$(date +%Y%m%d_%H%M%S)"
 mkdir -p "$BACKUP_DIR"
-COPIED_ANY=false
-if [[ -d "$SCRIPT_DIR/settings/profiles" ]]; then
-    cp -R "$SCRIPT_DIR/settings/profiles" "$BACKUP_DIR/profiles"
-    COPIED_ANY=true
-fi
-if [[ -d "$SCRIPT_DIR/settings/patterns" ]]; then
-    cp -R "$SCRIPT_DIR/settings/patterns" "$BACKUP_DIR/patterns"
-    COPIED_ANY=true
-fi
-if [ "$COPIED_ANY" = true ]; then
-    gui "Settings backed up to:\n$BACKUP_DIR"
+
+COPIED=false
+[[ -d "$SCRIPT_DIR/settings/profiles" ]] && cp -R "$SCRIPT_DIR/settings/profiles" "$BACKUP_DIR/" && COPIED=true
+[[ -d "$SCRIPT_DIR/settings/patterns" ]] && cp -R "$SCRIPT_DIR/settings/patterns" "$BACKUP_DIR/" && COPIED=true
+
+if $COPIED; then
+    gui "Backup created at:
+
+$BACKUP_DIR"
 else
-    gui "No profiles or patterns folder found. Skipping backup."
     BACKUP_DIR=""
+    gui "No profiles or patterns found. Backup skipped."
 fi
 
-# --- DOWNLOAD FUZZY MACRO ---
-gui "Downloading Fuzzy Macro from GitHub..."
+# ---------- TEMP WORKSPACE ----------
 
-TMP_ZIP="/tmp/fuzzy_macro_migration.zip"
-curl -L -o "$TMP_ZIP" "https://github.com/Fuzzy-Team/Fuzzy-Macro/archive/refs/heads/main.zip"
+TMP_ROOT="$(mktemp -d /tmp/fuzzy_migration.XXXXXX)"
+TMP_PROFILES="$TMP_ROOT/profiles"
+TMP_PATTERNS="$TMP_ROOT/patterns"
+TMP_DATA="$TMP_ROOT/data"
+TMP_ZIP="$TMP_ROOT/fuzzy_macro.zip"
+TMP_EXTRACT="$TMP_ROOT/extract"
 
-if [[ ! -f "$TMP_ZIP" ]]; then
-    gui_ok "ERROR: Failed to download Fuzzy Macro.\n\nPlease check your internet connection and try again."
-    exit 1
-fi
+# ---------- DOWNLOAD ----------
 
-# --- EXTRACT TO TEMPORARY LOCATION ---
-gui "Extracting Fuzzy Macro files..."
+gui "Downloading Fuzzy Macro…"
 
-TMP_EXTRACT="/tmp/fuzzy_macro_extract"
-rm -rf "$TMP_EXTRACT"
+curl -L -o "$TMP_ZIP" \
+"https://github.com/Fuzzy-Team/Fuzzy-Macro/archive/refs/heads/main.zip"
+
 mkdir -p "$TMP_EXTRACT"
-unzip -o "$TMP_ZIP" -d "$TMP_EXTRACT"
-rm "$TMP_ZIP"
+unzip -q "$TMP_ZIP" -d "$TMP_EXTRACT"
 
-# Find the extracted folder (should be Fuzzy-Macro-main)
-EXTRACTED_FOLDER=$(find "$TMP_EXTRACT" -maxdepth 1 -type d -name "Fuzzy-Macro-main" | head -n 1)
+EXTRACTED_FOLDER="$TMP_EXTRACT/Fuzzy-Macro-main"
 
-if [[ -z "$EXTRACTED_FOLDER" ]]; then
-    gui_ok "ERROR:  Could not find extracted Fuzzy Macro folder."
+if [[ ! -d "$EXTRACTED_FOLDER" ]]; then
+    gui_ok "ERROR: Failed to extract Fuzzy Macro."
     exit 1
 fi
 
-# --- REPLACE FILES (PRESERVE SETTINGS AND MIGRATION SCRIPT) ---
-gui "Migrating files to Fuzzy Macro.. .\n\nYour profiles will be preserved."
+# ---------- PRESERVE USER DATA ----------
 
-# Save this migration script temporarily
-MIGRATION_SCRIPT="$SCRIPT_DIR/migrate_from_existance.command"
-TMP_MIGRATION="/tmp/migrate_from_existance_temp.command"
-cp "$MIGRATION_SCRIPT" "$TMP_MIGRATION"
+[[ -d "$SCRIPT_DIR/settings/profiles" ]] && cp -R "$SCRIPT_DIR/settings/profiles" "$TMP_PROFILES"
+[[ -d "$SCRIPT_DIR/settings/patterns" ]] && cp -R "$SCRIPT_DIR/settings/patterns" "$TMP_PATTERNS"
+[[ -d "$SCRIPT_DIR/src/data" ]] && cp -R "$SCRIPT_DIR/src/data" "$TMP_DATA"
 
-# Save profiles temporarily
-TMP_PROFILES="/tmp/profiles_temp"
-rm -rf "$TMP_PROFILES"
-if [[ -d "$SCRIPT_DIR/settings/profiles" ]]; then
-    cp -R "$SCRIPT_DIR/settings/profiles" "$TMP_PROFILES"
-fi
+# ---------- REMOVE OLD FILES ----------
 
-# Save settings/patterns temporarily (for merging)
-TMP_PATTERNS="/tmp/patterns_temp"
-rm -rf "$TMP_PATTERNS"
-if [[ -d "$SCRIPT_DIR/settings/patterns" ]]; then
-    mkdir -p "$TMP_PATTERNS"
-    cp -R "$SCRIPT_DIR/settings/patterns" "$TMP_PATTERNS/"
-fi
+gui "Migrating files…
 
-# Save src/data temporarily
-TMP_DATA="/tmp/src_data_temp"
-rm -rf "$TMP_DATA"
-if [[ -d "$SCRIPT_DIR/src/data" ]]; then
-    mkdir -p "$TMP_DATA"
-    cp -R "$SCRIPT_DIR/src/data" "$TMP_DATA/"
-fi
+Your profiles will be preserved."
 
-# Delete all files except settings folder
-find "$SCRIPT_DIR" -mindepth 1 -maxdepth 1 !  -name "settings" ! -name "settings_backup_*" -exec rm -rf {} +
+find "$SCRIPT_DIR" -mindepth 1 -maxdepth 1 \
+    ! -name "settings" \
+    ! -name "settings_backup_*" \
+    -exec rm -rf {} +
 
-# Copy all Fuzzy Macro files
 cp -R "$EXTRACTED_FOLDER"/* "$SCRIPT_DIR/"
 
-# Restore profiles
-if [[ -d "$TMP_PROFILES" ]]; then
-    mkdir -p "$SCRIPT_DIR/settings"
-    cp -R "$TMP_PROFILES" "$SCRIPT_DIR/settings/"
-    rm -rf "$TMP_PROFILES"
-    gui "Your profiles have been restored."
-fi
+# ---------- RESTORE DATA ----------
 
-# Restore src/data
-if [[ -d "$TMP_DATA" ]]; then
-    mkdir -p "$SCRIPT_DIR/src"
-    cp -R "$TMP_DATA/data" "$SCRIPT_DIR/src/"
-    rm -rf "$TMP_DATA"
-    gui "Your src/data folder has been restored."
-fi
+[[ -d "$TMP_PROFILES" ]] && mkdir -p "$SCRIPT_DIR/settings" && cp -R "$TMP_PROFILES" "$SCRIPT_DIR/settings/"
+[[ -d "$TMP_DATA/data" ]] && mkdir -p "$SCRIPT_DIR/src" && cp -R "$TMP_DATA/data" "$SCRIPT_DIR/src/"
 
-# Restore and merge settings/patterns
 if [[ -d "$TMP_PATTERNS" ]]; then
     mkdir -p "$SCRIPT_DIR/settings/patterns"
-    MERGE_TS=$(date +%Y%m%d_%H%M%S)
-    for src in "$TMP_PATTERNS"/*; do
-        name=$(basename "$src")
+    TS=$(date +%Y%m%d_%H%M%S)
+    for item in "$TMP_PATTERNS"/*; do
+        name=$(basename "$item")
         dest="$SCRIPT_DIR/settings/patterns/$name"
-        if [[ ! -e "$dest" ]]; then
-            cp -R "$src" "$dest"
-        else
-            cp -R "$src" "$dest.from_existance_$MERGE_TS"
-        fi
+        [[ -e "$dest" ]] && dest="$dest.from_existance_$TS"
+        cp -R "$item" "$dest"
     done
-    rm -rf "$TMP_PATTERNS"
-    gui "Your settings/patterns folder has been merged (existing files preserved)."
 fi
 
-# Restore migration script
-cp "$TMP_MIGRATION" "$SCRIPT_DIR/migrate_from_existance.command"
-chmod +x "$SCRIPT_DIR/migrate_from_existance.command"
-rm "$TMP_MIGRATION"
+# ---------- RESTORE SCRIPT ----------
 
-# Cleanup temp extract folder
-rm -rf "$TMP_EXTRACT"
+cp "$MIGRATION_SCRIPT" "$SCRIPT_DIR/$(basename "$MIGRATION_SCRIPT")"
+chmod +x "$SCRIPT_DIR/$(basename "$MIGRATION_SCRIPT")"
 
-# Remove quarantine attributes
-xattr -dr com.apple.quarantine "$SCRIPT_DIR"
-chmod -R +x "$SCRIPT_DIR"
+# ---------- PERMISSIONS ----------
 
-# --- RUN INSTALL DEPENDENCIES ---
-gui "Running Fuzzy Macro dependency installation..."
+find "$SCRIPT_DIR" -type f \( -name "*.command" -o -name "*.sh" \) -exec chmod +x {} +
+xattr -dr com.apple.quarantine "$SCRIPT_DIR" 2>/dev/null || true
+
+# ---------- DEPENDENCIES ----------
 
 if [[ -f "$SCRIPT_DIR/install_dependencies.command" ]]; then
-    chmod +x "$SCRIPT_DIR/install_dependencies.command"
-    cd "$SCRIPT_DIR"
-    bash "$SCRIPT_DIR/install_dependencies.command"
-else
-    gui_ok "WARNING: install_dependencies.command not found.\n\nPlease run it manually from the Fuzzy Macro folder."
-fi
-
-# --- CLEANUP OPTIONS ---
-# Ask about deleting backup
-if [[ -n "$BACKUP_DIR" ]] && [[ -d "$BACKUP_DIR" ]]; then
-    if gui_yes_no "Migration complete! ✓\n\nDo you want to delete the backup folder?\n\n$BACKUP_DIR\n\n(Your profiles are already restored in the settings folder)"; then
-        rm -rf "$BACKUP_DIR"
-        gui "Backup folder deleted."
+    if gui_yes_no "Run Fuzzy Macro dependency installer now?"; then
+        (cd "$SCRIPT_DIR" && bash "./install_dependencies.command")
     else
-        gui "Backup folder kept at:\n$BACKUP_DIR"
+        gui_ok "Dependencies not installed. Run install_dependencies.command manually later."
     fi
 fi
 
-# Ask about deleting migration script
-DELETE_MIGRATION=false
-if gui_yes_no "Do you want to delete this migration script?\n\n$MIGRATION_SCRIPT\n\n(You won't need it anymore since migration is complete)"; then
-    DELETE_MIGRATION=true
-    gui "Migration script will be deleted."
-else
-    gui "Migration script kept at:\n$MIGRATION_SCRIPT"
+# ---------- CLEANUP ----------
+
+rm -rf "$TMP_ROOT"
+
+# ---------- BACKUP CLEANUP ----------
+
+if [[ -n "$BACKUP_DIR" && -d "$BACKUP_DIR" ]]; then
+    if gui_yes_no "Delete backup folder?
+
+$BACKUP_DIR"; then
+        rm -rf "$BACKUP_DIR"
+    fi
 fi
 
-# --- CLEANUP ALL TEMPORARY FILES ---
-gui "Cleaning up temporary files..."
+# ---------- SCRIPT SELF-DELETE ----------
 
-# Remove any remaining temp files from this migration
-rm -f "$TMP_ZIP" 2>/dev/null
-rm -rf "$TMP_EXTRACT" 2>/dev/null
-rm -rf "$TMP_PROFILES" 2>/dev/null
-rm -f "$TMP_MIGRATION" 2>/dev/null
+if gui_yes_no "Delete this migration script?
 
-# Clean up any leftover fuzzy macro migration files
-rm -f /tmp/fuzzy_macro_migration*. zip 2>/dev/null
-rm -rf /tmp/fuzzy_macro_extract* 2>/dev/null
-rm -rf /tmp/profiles_temp* 2>/dev/null
-rm -rf /tmp/src_data_temp* 2>/dev/null
-rm -rf /tmp/patterns_temp* 2>/dev/null
-rm -f /tmp/migrate_from_existance_temp*.command 2>/dev/null
-
-# If user wants to delete migration script, do it via cleanup script
-if [ "$DELETE_MIGRATION" = true ]; then
-    CLEANUP_SCRIPT="/tmp/cleanup_migration_$(date +%s).sh"
-    cat > "$CLEANUP_SCRIPT" <<EOF
-#!/bin/bash
-sleep 2
-rm -f "$MIGRATION_SCRIPT"
-rm -f "$CLEANUP_SCRIPT"
-rm -f /tmp/cleanup_migration_*. sh 2>/dev/null
-EOF
-    chmod +x "$CLEANUP_SCRIPT"
-    nohup "$CLEANUP_SCRIPT" &>/dev/null &
+$MIGRATION_SCRIPT"; then
+    ( sleep 2 && rm -f "$MIGRATION_SCRIPT" ) &
 fi
 
-# --- COMPLETION ---
-FINAL_MSG="Migration complete!  ✓\n\nYour Existance Macro folder has been converted to Fuzzy Macro.\n\nYour profiles are preserved in:\n$SCRIPT_DIR/settings/profiles"
+# ---------- DONE ----------
 
-if [[ -n "$BACKUP_DIR" ]] && [[ -d "$BACKUP_DIR" ]]; then
-    FINAL_MSG="$FINAL_MSG\n\nBackup location:\n$BACKUP_DIR"
-fi
+gui_ok "Migration complete ✓
 
-FINAL_MSG="$FINAL_MSG\n\nAll temporary files have been cleaned up.\n\nYou can now run Fuzzy Macro!"
+Your folder is now Fuzzy Macro.
 
-gui_ok "$FINAL_MSG"
+Profiles location:
+$SCRIPT_DIR/settings/profiles"
 
 exit 0
