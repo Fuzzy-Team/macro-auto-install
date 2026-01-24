@@ -54,7 +54,7 @@ fi
 # ---------- SCRIPT LOCATION ----------
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-MIGRATION_SCRIPT="$(realpath "$0")"
+MIGRATION_SCRIPT="$(readlink -f "$0" 2>/dev/null || echo "$0")"
 
 # ---------- SAFETY CHECKS ----------
 
