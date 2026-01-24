@@ -53,8 +53,34 @@ fi
 
 # ---------- SCRIPT LOCATION ----------
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-MIGRATION_SCRIPT="$(readlink -f "$0" 2>/dev/null || echo "$0")"
+# Prompt user to select the macro folder so the script can be run remotely
+choose_folder() {
+    osascript <<EOF
+tell application "Finder"
+    set theFolder to (choose folder with prompt "Select your Existance Macro folder to migrate.")
+    POSIX path of theFolder
+end tell
+EOF
+}
+
+# Try prompting the user for the macro folder first. If that fails, fall back to script location.
+SCRIPT_DIR=""
+if CHOSEN_DIR=$(choose_folder 2>/dev/null); then
+    SCRIPT_DIR="${CHOSEN_DIR%/}"
+fi
+
+if [[ -z "$SCRIPT_DIR" || "$SCRIPT_DIR" == "/" ]]; then
+    SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd 2>/dev/null || pwd)"
+fi
+
+# Set MIGRATION_SCRIPT only if this script exists as a readable file on disk.
+# When executed via piping (curl | bash) there will be no on-disk script,
+# so we leave MIGRATION_SCRIPT empty and avoid copying or deleting a non-existent file.
+if [[ -f "$0" && -r "$0" ]]; then
+    MIGRATION_SCRIPT="$(readlink -f "$0" 2>/dev/null || echo "$0")"
+else
+    MIGRATION_SCRIPT=""
+fi
 
 # ---------- SAFETY CHECKS ----------
 
@@ -160,8 +186,13 @@ fi
 
 # ---------- RESTORE SCRIPT ----------
 
-cp "$MIGRATION_SCRIPT" "$SCRIPT_DIR/$(basename "$MIGRATION_SCRIPT")"
-chmod +x "$SCRIPT_DIR/$(basename "$MIGRATION_SCRIPT")"
+# If we have a local copy of the migration script (downloaded when run remotely),
+# save it into the target folder as migrate_from_existance.command so the user keeps
+# a copy of the migration helper.
+if [[ -f "$MIGRATION_SCRIPT" ]]; then
+    cp "$MIGRATION_SCRIPT" "$SCRIPT_DIR/migrate_from_existance.command"
+    chmod +x "$SCRIPT_DIR/migrate_from_existance.command"
+fi
 
 # ---------- PERMISSIONS ----------
 
@@ -194,10 +225,14 @@ fi
 
 # ---------- SCRIPT SELF-DELETE ----------
 
-if gui_yes_no "Delete this migration script?
+# Only offer to delete the migration script if we actually have a real on-disk
+# copy (i.e. not running via piping). When MIGRATION_SCRIPT is empty we skip this.
+if [[ -n "$MIGRATION_SCRIPT" && -f "$MIGRATION_SCRIPT" ]]; then
+    if gui_yes_no "Delete this migration script?
 
 $MIGRATION_SCRIPT"; then
-    ( sleep 2 && rm -f "$MIGRATION_SCRIPT" ) &
+        ( sleep 2 && rm -f "$MIGRATION_SCRIPT" ) &
+    fi
 fi
 
 # ---------- DONE ----------
