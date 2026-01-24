@@ -223,17 +223,6 @@ $BACKUP_DIR"; then
     fi
 fi
 
-# ---------- SCRIPT SELF-DELETE ----------
-
-# Only offer to delete the migration script if we actually have a real on-disk
-# copy (i.e. not running via piping). When MIGRATION_SCRIPT is empty we skip this.
-if [[ -n "$MIGRATION_SCRIPT" && -f "$MIGRATION_SCRIPT" ]]; then
-    if gui_yes_no "Delete this migration script?
-
-$MIGRATION_SCRIPT"; then
-        ( sleep 2 && rm -f "$MIGRATION_SCRIPT" ) &
-    fi
-fi
 
 # ---------- DONE ----------
 
