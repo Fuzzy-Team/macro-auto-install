@@ -18,9 +18,33 @@ EOF
 }
 
 gui_yes_no() {
-    osascript <<EOF >/dev/null
-display dialog "$1" buttons {"Yes", "No"} default button "Yes"
-EOF
+    local msg="$1"
+    # Escape double quotes for AppleScript
+    local esc_msg
+    esc_msg=$(printf '%s' "$msg" | sed 's/"/\\"/g')
+    local ans
+    ans=$(osascript <<APPLESCRIPT
+try
+    display dialog "${esc_msg}" buttons {"Yes", "No"} default button "Yes"
+    if button returned of result is "Yes" then
+        return "YES"
+    else
+        return "NO"
+    end if
+on error
+    return "NO"
+end try
+APPLESCRIPT
+)
+
+    # Trim trailing newline
+    ans=${ans%$'\n'}
+
+    if [[ "$ans" == "YES" ]]; then
+        return 0
+    else
+        return 1
+    fi
 }
 
 gui_ok() {
@@ -118,14 +142,25 @@ Missing: settings/"
     exit 1
 fi
 
-if ! gui_yes_no "Confirm script location:
+while true; do
+    if gui_yes_no "Confirm script location:
 
 $SCRIPT_DIR
 
 Is this your Existance Macro folder?"; then
-    gui_ok "Move the script into the Existance Macro folder and try again."
-    exit 1
-fi
+        break
+    else
+        gui "Let's choose the folder again."
+        if CHOSEN_DIR=$(choose_folder 2>/dev/null); then
+            SCRIPT_DIR="${CHOSEN_DIR%/}"
+            # loop back to confirm the newly chosen folder
+            continue
+        else
+            gui_ok "No folder selected. Aborting."
+            exit 1
+        fi
+    fi
+done
 
 # ---------- BACKUP ----------
 
