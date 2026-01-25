@@ -53,14 +53,36 @@ fi
 
 # ---------- SCRIPT LOCATION ----------
 
-# Prompt user to select the macro folder so the script can be run remotely
+# Prompt user to select the macro folder so the script can be run remotely.
+# This brings Finder to the front and will not return until a folder is chosen.
 choose_folder() {
-    osascript <<EOF
+    while true; do
+        CHOSEN=$(osascript <<'APPLESCRIPT'
 tell application "Finder"
-    set theFolder to (choose folder with prompt "Select your Existance Macro folder to migrate.")
-    POSIX path of theFolder
+    activate
+    try
+        set theFolder to choose folder with prompt "Select your Existance Macro folder to migrate."
+        POSIX path of theFolder
+    on error
+        return ""
+    end try
 end tell
+APPLESCRIPT
+)
+
+        # Trim trailing newline
+        CHOSEN=${CHOSEN%$'\n'}
+
+        if [[ -n "$CHOSEN" ]]; then
+            echo "$CHOSEN"
+            return 0
+        fi
+
+        # If user cancelled, politely remind them and loop again.
+        osascript <<EOF >/dev/null
+display dialog "Please select a folder in Finder to continue the migration." buttons {"OK"} default button "OK"
 EOF
+    done
 }
 
 # Try prompting the user for the macro folder first. If that fails, fall back to script location.
