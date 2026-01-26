@@ -3,7 +3,6 @@
 # ---------------------------------------------
 # Existance → Fuzzy Macro Migration Script
 # macOS 10.12+ / Intel or Apple Silicon
-# Note: This script is untested and is not advised at this current time.
 # ---------------------------------------------
 
 set -euo pipefail
