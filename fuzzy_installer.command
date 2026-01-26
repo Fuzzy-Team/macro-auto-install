@@ -64,11 +64,25 @@ gui "Running virtual environment setup..."
 
 bash -c "$(curl -fsSL https://raw.githubusercontent.com/Fuzzy-Team/Fuzzy-Macro/refs/heads/main/install_dependencies.command)"
 
-# --- DOWNLOAD MACRO ZIP ---
-gui "Downloading the Fuzzy Macro package..."
+
+# --- DOWNLOAD MACRO ZIP (by latest tag) ---
+gui "Fetching latest Fuzzy Macro version..."
 
 TMP_ZIP="/tmp/fuzzy_macro.zip"
-curl -L -o "$TMP_ZIP" "https://github.com/Fuzzy-Team/Fuzzy-Macro/archive/refs/heads/main.zip"
+TMP_VERSION="/tmp/fuzzy_macro_version.txt"
+
+# Get latest version tag from version.txt (like update.py)
+curl -fsSL -o "$TMP_VERSION" "https://raw.githubusercontent.com/Fuzzy-Team/Fuzzy-Macro/refs/heads/main/src/webapp/version.txt"
+if [[ ! -s "$TMP_VERSION" ]]; then
+    gui "Failed to fetch latest version. Aborting."
+    exit 1
+fi
+LATEST_VERSION=$(head -n1 "$TMP_VERSION" | tr -d '\r\n')
+rm -f "$TMP_VERSION"
+
+gui "Downloading Fuzzy Macro version $LATEST_VERSION..."
+ZIP_URL="https://github.com/Fuzzy-Team/Fuzzy-Macro/archive/refs/tags/${LATEST_VERSION}.zip"
+curl -L -o "$TMP_ZIP" "$ZIP_URL"
 
 # --- SETUP USER FOLDER ---
 gui "Installing Fuzzy Macro into your home folder..."
@@ -79,8 +93,8 @@ mkdir -p "$APP_DIR"
 unzip -o "$TMP_ZIP" -d "$APP_DIR"
 rm "$TMP_ZIP"
 
-# Move inner folder up one level
-inner=$(find "$APP_DIR" -maxdepth 1 -type d -name "Fuzzy-Macro-main")
+# Move inner folder up one level (tag zips use Fuzzy-Macro-$LATEST_VERSION)
+inner=$(find "$APP_DIR" -maxdepth 1 -type d -name "Fuzzy-Macro-*")
 mv "$inner"/* "$APP_DIR"
 rm -rf "$inner"
 
