@@ -212,32 +212,129 @@ fi
 [[ -d "$SCRIPT_DIR/settings/patterns" ]] && cp -R "$SCRIPT_DIR/settings/patterns" "$TMP_PATTERNS"
 [[ -d "$SCRIPT_DIR/src/data" ]] && cp -R "$SCRIPT_DIR/src/data" "$TMP_DATA"
 
-# ---------- REMOVE OLD FILES ----------
-
 gui "Migrating files…
 
 Your profiles will be preserved."
 
-find "$SCRIPT_DIR" -mindepth 1 -maxdepth 1 \
-    ! -name "settings" \
-    ! -name "settings_backup_*" \
-    -exec rm -rf {} +
+# ---------- PROTECTED PATHS ----------
+# These match update.py's protected logic
+PROTECTED_FOLDERS=(
+    "settings/profiles"
+    "settings/patterns"
+    "src/data/user"
+)
+PROTECTED_FILES=(
+    ".git"
+)
 
-cp -R "$EXTRACTED_FOLDER"/* "$SCRIPT_DIR/"
+
+# Helper: check if a path is protected
+is_protected() {
+    local relpath="$1"
+    for pf in "${PROTECTED_FOLDERS[@]}"; do
+        [[ "$relpath" == "$pf" || "$relpath" == "$pf"/* ]] && return 0
+    done
+    for pf in "${PROTECTED_FILES[@]}"; do
+        [[ "$relpath" == "$pf" ]] && return 0
+    done
+    return 1
+}
+
+# Helper: safe rm -rf (refuse to remove /, empty, or protected)
+safe_rm_rf() {
+    local target="$1"
+    # Refuse to remove empty or root
+    [[ -z "$target" || "$target" == "/" ]] && {
+        echo "[ERROR] Refusing to rm -rf empty or root path! ($target)" >&2
+        return 1
+    }
+    # Refuse to remove protected
+    local relname=$(basename "$target")
+    is_protected "$relname" && {
+        echo "[INFO] Skipping protected path: $target" >&2
+        return 0
+    }
+    rm -rf "$target"
+}
+
+# ---------- REMOVE OLD FILES (EXCEPT PROTECTED) ----------
+gui "Migrating files…
+
+Your profiles, patterns, and user data will be preserved."
+
+
+shopt -s dotglob
+for item in "$SCRIPT_DIR"/*; do
+    name=$(basename "$item")
+    # skip protected folders/files and backups
+    is_protected "$name" && continue
+    [[ "$name" == "settings_backup_"* ]] && continue
+    safe_rm_rf "$item"
+done
+shopt -u dotglob
+
+# ---------- COPY NEW FILES (EXCEPT PROTECTED) ----------
+copy_dir_except_protected() {
+    local src="$1"
+    local dst="$2"
+    local relbase="$3"
+    mkdir -p "$dst"
+    shopt -s dotglob
+    for item in "$src"/*; do
+        local name=$(basename "$item")
+        local relpath="$relbase$name"
+        is_protected "$relpath" && continue
+        if [[ -d "$item" ]]; then
+            copy_dir_except_protected "$item" "$dst/$name" "$relpath/"
+        else
+            cp -p "$item" "$dst/$name"
+        fi
+    done
+    shopt -u dotglob
+}
+
+copy_dir_except_protected "$EXTRACTED_FOLDER" "$SCRIPT_DIR" ""
 
 # ---------- RESTORE DATA ----------
-
 [[ -d "$TMP_PROFILES" ]] && mkdir -p "$SCRIPT_DIR/settings" && cp -R "$TMP_PROFILES" "$SCRIPT_DIR/settings/"
-[[ -d "$TMP_DATA/data" ]] && mkdir -p "$SCRIPT_DIR/src" && cp -R "$TMP_DATA/data" "$SCRIPT_DIR/src/"
+[[ -d "$TMP_DATA/data" ]] && mkdir -p "$SCRIPT_DIR/src/data" && cp -R "$TMP_DATA/data" "$SCRIPT_DIR/src/"
 
+# Merge patterns: if file exists, save as .newN (like update.py)
 if [[ -d "$TMP_PATTERNS" ]]; then
     mkdir -p "$SCRIPT_DIR/settings/patterns"
-    TS=$(date +%Y%m%d_%H%M%S)
     for item in "$TMP_PATTERNS"/*; do
         name=$(basename "$item")
         dest="$SCRIPT_DIR/settings/patterns/$name"
-        [[ -e "$dest" ]] && dest="$dest.from_existance_$TS"
-        cp -R "$item" "$dest"
+        if [[ ! -e "$dest" ]]; then
+            cp -R "$item" "$dest"
+        else
+            # Find next available .newN suffix
+            base="${name%.*}"
+            ext="${name##*.}"
+            [[ "$base" == "$ext" ]] && ext="" || ext=".$ext"
+            n=1
+            while [[ -e "$SCRIPT_DIR/settings/patterns/${base}.new${n}${ext}" ]]; do
+                ((n++))
+            done
+            cp -R "$item" "$SCRIPT_DIR/settings/patterns/${base}.new${n}${ext}"
+        fi
+    done
+    # Post-merge cleanup: promote .newN if base missing, else delete .newN
+    for f in "$SCRIPT_DIR/settings/patterns"/*.new*; do
+        [[ ! -e "$f" ]] && continue
+        # Extract base and ext
+        fname=$(basename "$f")
+        if [[ "$fname" =~ ^(.+?)\.new[0-9]+(\..+)?$ ]]; then
+            base="${BASH_REMATCH[1]}"
+            ext="${BASH_REMATCH[2]}"
+            [[ -z "$ext" ]] && ext=""
+            candidate="$SCRIPT_DIR/settings/patterns/${base}${ext}"
+            if [[ -e "$candidate" ]]; then
+                rm -f "$f"
+            else
+                mv "$f" "$candidate"
+            fi
+        fi
     done
 fi
 
