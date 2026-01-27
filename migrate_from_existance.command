@@ -169,6 +169,7 @@ mkdir -p "$BACKUP_DIR"
 COPIED=false
 [[ -d "$SCRIPT_DIR/settings/profiles" ]] && cp -R "$SCRIPT_DIR/settings/profiles" "$BACKUP_DIR/" && COPIED=true
 [[ -d "$SCRIPT_DIR/settings/patterns" ]] && cp -R "$SCRIPT_DIR/settings/patterns" "$BACKUP_DIR/" && COPIED=true
+[[ -d "$SCRIPT_DIR/src/data/user" ]] && mkdir -p "$BACKUP_DIR/data" && cp -R "$SCRIPT_DIR/src/data/user" "$BACKUP_DIR/data/" && COPIED=true
 
 if $COPIED; then
     gui "Backup created at:
@@ -176,7 +177,7 @@ if $COPIED; then
 $BACKUP_DIR"
 else
     BACKUP_DIR=""
-    gui "No profiles or patterns found. Backup skipped."
+    gui "No profiles, patterns, or user data found. Backup skipped."
 fi
 
 # ---------- TEMP WORKSPACE ----------
@@ -184,7 +185,7 @@ fi
 TMP_ROOT="$(mktemp -d /tmp/fuzzy_migration.XXXXXX)"
 TMP_PROFILES="$TMP_ROOT/profiles"
 TMP_PATTERNS="$TMP_ROOT/patterns"
-TMP_DATA="$TMP_ROOT/data"
+TMP_USER_DATA="$TMP_ROOT/user"
 TMP_ZIP="$TMP_ROOT/fuzzy_macro.zip"
 TMP_EXTRACT="$TMP_ROOT/extract"
 
@@ -209,7 +210,7 @@ fi
 
 [[ -d "$SCRIPT_DIR/settings/profiles" ]] && cp -R "$SCRIPT_DIR/settings/profiles" "$TMP_PROFILES"
 [[ -d "$SCRIPT_DIR/settings/patterns" ]] && cp -R "$SCRIPT_DIR/settings/patterns" "$TMP_PATTERNS"
-[[ -d "$SCRIPT_DIR/src/data" ]] && cp -R "$SCRIPT_DIR/src/data" "$TMP_DATA"
+[[ -d "$SCRIPT_DIR/src/data/user" ]] && cp -R "$SCRIPT_DIR/src/data/user" "$TMP_USER_DATA"
 
 gui "Migrating files…
 
@@ -296,7 +297,7 @@ copy_dir_except_protected "$EXTRACTED_FOLDER" "$SCRIPT_DIR" ""
 
 # ---------- RESTORE DATA ----------
 [[ -d "$TMP_PROFILES" ]] && mkdir -p "$SCRIPT_DIR/settings" && cp -R "$TMP_PROFILES" "$SCRIPT_DIR/settings/"
-[[ -d "$TMP_DATA/data" ]] && mkdir -p "$SCRIPT_DIR/src/data" && cp -R "$TMP_DATA/data" "$SCRIPT_DIR/src/"
+[[ -d "$TMP_USER_DATA" ]] && mkdir -p "$SCRIPT_DIR/src/data" && cp -R "$TMP_USER_DATA" "$SCRIPT_DIR/src/data/"
 
 # Merge patterns: if file exists, save as .newN (like update.py)
 if [[ -d "$TMP_PATTERNS" ]]; then
@@ -349,7 +350,7 @@ fi
 
 # ---------- PERMISSIONS ----------
 
-find "$SCRIPT_DIR" -type f \( -name "*.command" -o -name "*.sh" \) -exec chmod +x {} +
+find "$SCRIPT_DIR" -type f \\( -name "*.command" -o -name "*.sh" \\) -exec chmod +x {} +
 xattr -dr com.apple.quarantine "$SCRIPT_DIR" 2>/dev/null || true
 
 # ---------- DEPENDENCIES ----------
