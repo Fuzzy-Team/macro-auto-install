@@ -350,7 +350,7 @@ fi
 
 # ---------- PERMISSIONS ----------
 
-find "$SCRIPT_DIR" -type f \\( -name "*.command" -o -name "*.sh" \\) -exec chmod +x {} +
+find "$SCRIPT_DIR" -type f \( -name "*.command" -o -name "*.sh" \) -exec chmod +x {} +
 xattr -dr com.apple.quarantine "$SCRIPT_DIR" 2>/dev/null || true
 
 # ---------- DEPENDENCIES ----------
