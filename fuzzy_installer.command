@@ -87,7 +87,7 @@ curl -L -o "$TMP_ZIP" "$ZIP_URL"
 # --- SETUP USER FOLDER ---
 gui "Installing Fuzzy Macro into your home folder..."
 
-APP_DIR="$HOME/Fuzzy Macro"
+APP_DIR="$HOME/Downloads/Fuzzy Macro"
 rm -rf "$APP_DIR"
 mkdir -p "$APP_DIR"
 unzip -o "$TMP_ZIP" -d "$APP_DIR"
