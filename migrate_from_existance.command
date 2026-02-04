@@ -193,13 +193,33 @@ TMP_EXTRACT="$TMP_ROOT/extract"
 
 gui "Downloading Fuzzy Macro…"
 
-curl -L -o "$TMP_ZIP" \
-"https://github.com/Fuzzy-Team/Fuzzy-Macro/archive/refs/heads/main.zip"
+# Try to fetch remote version like update.py and download the tagged zip if available.
+# Falls back to the 'main' branch zip if the version file can't be fetched.
+remote_version_url="https://raw.githubusercontent.com/Fuzzy-Team/Fuzzy-Macro/refs/heads/main/src/webapp/version.txt?cb=$(date +%s)"
+remote_version=$(curl -fsS --max-time 15 "$remote_version_url" || true)
+remote_version=$(printf '%s' "$remote_version" | tr -d '\r' | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
+if [[ -n "$remote_version" ]]; then
+    zip_url="https://github.com/Fuzzy-Team/Fuzzy-Macro/archive/refs/tags/${remote_version}.zip"
+else
+    zip_url="https://github.com/Fuzzy-Team/Fuzzy-Macro/archive/refs/heads/main.zip"
+fi
+
+curl -L -o "$TMP_ZIP" --max-time 60 "$zip_url" || {
+    gui_ok "ERROR: Failed to download Fuzzy Macro from $zip_url"
+    exit 1
+}
 
 mkdir -p "$TMP_EXTRACT"
 unzip -q "$TMP_ZIP" -d "$TMP_EXTRACT"
 
-EXTRACTED_FOLDER="$TMP_EXTRACT/Fuzzy-Macro-main"
+# Locate the extracted folder (handles both main and tagged zips)
+EXTRACTED_FOLDER=""
+for d in "$TMP_EXTRACT"/Fuzzy-Macro*; do
+    if [[ -d "$d" ]]; then
+        EXTRACTED_FOLDER="$d"
+        break
+    fi
+done
 
 if [[ ! -d "$EXTRACTED_FOLDER" ]]; then
     gui_ok "ERROR: Failed to extract Fuzzy Macro."
