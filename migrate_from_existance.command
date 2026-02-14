@@ -193,13 +193,36 @@ TMP_EXTRACT="$TMP_ROOT/extract"
 
 gui "Downloading Fuzzy Macro…"
 
-# Try to fetch remote version like update.py and download the tagged zip if available.
-# Falls back to the 'main' branch zip if the version file can't be fetched.
-remote_version_url="https://raw.githubusercontent.com/Fuzzy-Team/Fuzzy-Macro/refs/heads/main/src/webapp/version.txt?cb=$(date +%s)"
-remote_version=$(curl -fsS --max-time 15 "$remote_version_url" || true)
-remote_version=$(printf '%s' "$remote_version" | tr -d '\r' | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
-if [[ -n "$remote_version" ]]; then
-    zip_url="https://github.com/Fuzzy-Team/Fuzzy-Macro/archive/refs/tags/${remote_version}.zip"
+is_prerelease_tag() {
+    local tag="$1"
+    [[ "$tag" == *-* ]] && return 0
+    [[ "$tag" == *alpha* || "$tag" == *beta* || "$tag" == *rc* || "$tag" == *pre* ]] && return 0
+    return 1
+}
+
+fetch_latest_non_prerelease_tag() {
+    local release_api tags_api tag
+    release_api="https://api.github.com/repos/Fuzzy-Team/Fuzzy-Macro/releases/latest"
+    tag=$(curl -fsSL "$release_api" | sed -n 's/.*"tag_name":[[:space:]]*"\([^"]*\)".*/\1/p' | head -n1)
+    if [[ -n "$tag" ]] && ! is_prerelease_tag "$tag"; then
+        printf '%s' "$tag"
+        return 0
+    fi
+
+    tags_api="https://api.github.com/repos/Fuzzy-Team/Fuzzy-Macro/tags?per_page=100"
+    while read -r tag; do
+        [[ -z "$tag" ]] && continue
+        if ! is_prerelease_tag "$tag"; then
+            printf '%s' "$tag"
+            return 0
+        fi
+    done < <(curl -fsSL "$tags_api" | sed -n 's/.*"name":[[:space:]]*"\([^"]*\)".*/\1/p')
+
+    return 1
+}
+
+if LATEST_VERSION=$(fetch_latest_non_prerelease_tag); then
+    zip_url="https://github.com/Fuzzy-Team/Fuzzy-Macro/archive/refs/tags/${LATEST_VERSION}.zip"
 else
     zip_url="https://github.com/Fuzzy-Team/Fuzzy-Macro/archive/refs/heads/main.zip"
 fi

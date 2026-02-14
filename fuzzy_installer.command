@@ -69,16 +69,39 @@ bash -c "$(curl -fsSL https://raw.githubusercontent.com/Fuzzy-Team/Fuzzy-Macro/r
 gui "Fetching latest Fuzzy Macro version..."
 
 TMP_ZIP="/tmp/fuzzy_macro.zip"
-TMP_VERSION="/tmp/fuzzy_macro_version.txt"
 
-# Get latest version tag from version.txt (like update.py)
-curl -fsSL -o "$TMP_VERSION" "https://raw.githubusercontent.com/Fuzzy-Team/Fuzzy-Macro/refs/heads/main/src/webapp/version.txt"
-if [[ ! -s "$TMP_VERSION" ]]; then
-    gui "Failed to fetch latest version. Aborting."
+is_prerelease_tag() {
+    local tag="$1"
+    [[ "$tag" == *-* ]] && return 0
+    [[ "$tag" == *alpha* || "$tag" == *beta* || "$tag" == *rc* || "$tag" == *pre* ]] && return 0
+    return 1
+}
+
+fetch_latest_non_prerelease_tag() {
+    local release_api tags_api tag
+    release_api="https://api.github.com/repos/Fuzzy-Team/Fuzzy-Macro/releases/latest"
+    tag=$(curl -fsSL "$release_api" | sed -n 's/.*"tag_name":[[:space:]]*"\([^"]*\)".*/\1/p' | head -n1)
+    if [[ -n "$tag" ]] && ! is_prerelease_tag "$tag"; then
+        printf '%s' "$tag"
+        return 0
+    fi
+
+    tags_api="https://api.github.com/repos/Fuzzy-Team/Fuzzy-Macro/tags?per_page=100"
+    while read -r tag; do
+        [[ -z "$tag" ]] && continue
+        if ! is_prerelease_tag "$tag"; then
+            printf '%s' "$tag"
+            return 0
+        fi
+    done < <(curl -fsSL "$tags_api" | sed -n 's/.*"name":[[:space:]]*"\([^"]*\)".*/\1/p')
+
+    return 1
+}
+
+if ! LATEST_VERSION=$(fetch_latest_non_prerelease_tag); then
+    gui "Failed to fetch latest non-prerelease tag. Aborting."
     exit 1
 fi
-LATEST_VERSION=$(head -n1 "$TMP_VERSION" | tr -d '\r\n')
-rm -f "$TMP_VERSION"
 
 gui "Downloading Fuzzy Macro version $LATEST_VERSION..."
 ZIP_URL="https://github.com/Fuzzy-Team/Fuzzy-Macro/archive/refs/tags/${LATEST_VERSION}.zip"
