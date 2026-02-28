@@ -1,4 +1,5 @@
-Install script for windows
+Install script for Windows
+
 ```
-powershell -NoProfile -ExecutionPolicy Bypass -Command "IEX (New-Object Net.WebClient).DownloadString('https://raw.githubusercontent.com/Fuzzy-Team/Fuzzy-Macro/main/windows/installmacro.ps1')"
+& ([ScriptBlock]::Create((irm "https://raw.githubusercontent.com/Fuzzy-Team/macro-auto-install/refs/heads/main/windows/installmacrob.ps1")))
 ```
