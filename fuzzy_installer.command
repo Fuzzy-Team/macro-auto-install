@@ -108,7 +108,7 @@ ZIP_URL="https://github.com/Fuzzy-Team/Fuzzy-Macro/archive/refs/tags/${LATEST_VE
 curl -L -o "$TMP_ZIP" "$ZIP_URL"
 
 # --- SETUP USER FOLDER ---
-gui "Installing Fuzzy Macro into your home folder..."
+gui "Installing Fuzzy Macro into your downloads folder..."
 
 APP_DIR="$HOME/Downloads/Fuzzy Macro"
 rm -rf "$APP_DIR"
