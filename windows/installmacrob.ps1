@@ -63,7 +63,7 @@ try {
         try {
             Invoke-WebRequest -Uri $pythonUrl -OutFile $tmpPython -UseBasicParsing
             Write-Host "Downloaded Python installer to $tmpPython"
-            $arguments = '/quiet','InstallAllUsers=1','PrependPath=1'
+            $arguments = 'InstallAllUsers=1','PrependPath=1'
             Write-Host "Running Python installer (may prompt for elevation)..."
             Start-Process -FilePath $tmpPython -ArgumentList $arguments -Wait -Verb runAs
             Remove-Item $tmpPython -Force
