@@ -42,6 +42,37 @@ try {
         Remove-Item -Recurse -Force -LiteralPath $inner.FullName
     }
 
+    # Check for Python and install if missing
+    try {
+        $pythonCmd = Get-Command python -ErrorAction SilentlyContinue
+    } catch {
+        $pythonCmd = $null
+    }
+
+    if (-not $pythonCmd) {
+        Write-Host "Python not found. Downloading and installing Python 3.9.8 (x64)..."
+        $pyInstallerUrl = 'https://www.python.org/ftp/python/3.9.8/python-3.9.8-amd64.exe'
+        $pyTmp = Join-Path -Path $env:TEMP -ChildPath 'python-3.9.8-amd64.exe'
+
+        try {
+            Invoke-WebRequest -Uri $pyInstallerUrl -OutFile $pyTmp -UseBasicParsing -ErrorAction Stop
+            Write-Host "Running Python installer (silent). This may prompt for UAC."
+            Start-Process -FilePath $pyTmp -ArgumentList '/quiet','InstallAllUsers=1','PrependPath=1' -Verb runAs -Wait
+            Remove-Item -LiteralPath $pyTmp -Force -ErrorAction SilentlyContinue
+
+            if (Get-Command python -ErrorAction SilentlyContinue) {
+                Write-Host "Python installed successfully."
+            } else {
+                Write-Host "Warning: Python installation completed but 'python' not found on PATH. You may need to log out/in or add it to PATH manually."
+            }
+        }
+        catch {
+            Write-Host "Error downloading or installing Python: $_"
+        }
+    } else {
+        Write-Host "Python detected: $($pythonCmd.Path)"
+    }
+
     # Run the bundled Windows dependency installer if present
     $installScript = Join-Path -Path $AppDir -ChildPath 'install_dependencies.bat'
     if (Test-Path $installScript) {
