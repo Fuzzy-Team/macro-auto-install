@@ -34,6 +34,46 @@ try {
         Remove-Item -Recurse -Force -LiteralPath $inner.FullName
     }
 
+    # Check for Python 3 installation; download and install if missing
+    Write-Host "Checking for Python 3 installation..."
+    $pythonCmd = Get-Command python -ErrorAction SilentlyContinue
+    if (-not $pythonCmd) {
+        $pythonCmd = Get-Command python3 -ErrorAction SilentlyContinue
+    }
+    if ($pythonCmd) {
+        try {
+            $verOutput = & $pythonCmd.Source --version 2>&1
+        } catch {
+            $verOutput = ""
+        }
+    } else {
+        $verOutput = ""
+    }
+    if ($verOutput -and $verOutput -match 'Python\s+([0-9]+)\.') {
+        $major = [int]$matches[1]
+    } else {
+        $major = 0
+    }
+    if ($major -ge 3) {
+        Write-Host "Python $verOutput detected; skipping installation."
+    } else {
+        Write-Host "Python 3 not found. Downloading and installing Python 3.9.8..."
+        $pythonUrl = 'https://www.python.org/ftp/python/3.9.8/python-3.9.8-amd64.exe'
+        $tmpPython = Join-Path -Path $env:TEMP -ChildPath 'python-3.9.8-amd64.exe'
+        try {
+            Invoke-WebRequest -Uri $pythonUrl -OutFile $tmpPython -UseBasicParsing
+            Write-Host "Downloaded Python installer to $tmpPython"
+            $arguments = '/quiet','InstallAllUsers=1','PrependPath=1'
+            Write-Host "Running Python installer (may prompt for elevation)..."
+            Start-Process -FilePath $tmpPython -ArgumentList $arguments -Wait -Verb runAs
+            Remove-Item $tmpPython -Force
+            Write-Host "Python installation step complete."
+        } catch {
+            Write-Host "Failed to download or install Python: $_"
+            Write-Host "You may need to install Python manually from $pythonUrl"
+        }
+    }
+
     # Run the bundled Windows dependency installer if present
     $installScript = Join-Path -Path $AppDir -ChildPath 'install_dependencies.bat'
     if (Test-Path $installScript) {
