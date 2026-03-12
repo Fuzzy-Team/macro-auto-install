@@ -406,6 +406,14 @@ if [[ -f "$SCRIPT_DIR/install_dependencies.command" ]]; then
     fi
 fi
 
+# On macOS, remove any leftover Windows batch helpers from the migrated folder
+if [[ -f "$SCRIPT_DIR/run_macro.bat" ]]; then
+    rm -f "$SCRIPT_DIR/run_macro.bat" || true
+fi
+if [[ -f "$SCRIPT_DIR/install_dependencies.bat" ]]; then
+    rm -f "$SCRIPT_DIR/install_dependencies.bat" || true
+fi
+
 # ---------- CLEANUP ----------
 
 rm -rf "$TMP_ROOT"
