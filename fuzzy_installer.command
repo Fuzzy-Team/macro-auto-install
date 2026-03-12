@@ -181,4 +181,12 @@ gui "Once you have enabled the permissions, click Continue."
 # --- DONE ---
 gui "Installation complete!\n\nYou can now launch the macro from the Desktop shortcut.\nIf Terminal prompts for permissions on first run, grant them."
 
+# Remove Windows batch files that are not needed on macOS installs
+if [[ -f "$APP_DIR/run_macro.bat" ]]; then
+    rm -f "$APP_DIR/run_macro.bat" || true
+fi
+if [[ -f "$APP_DIR/install_dependencies.bat" ]]; then
+    rm -f "$APP_DIR/install_dependencies.bat" || true
+fi
+
 exit 0
