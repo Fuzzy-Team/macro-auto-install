@@ -96,6 +96,11 @@ try {
     } else {
         Write-Host "run_macro.bat not found; skipping shortcut creation."
     }
+    # Remove macOS helper scripts that are not needed on Windows installs
+    $cmd1 = Join-Path -Path $AppDir -ChildPath 'run_macro.command'
+    $cmd2 = Join-Path -Path $AppDir -ChildPath 'install_dependencies.command'
+    if (Test-Path $cmd1) { Remove-Item -LiteralPath $cmd1 -Force -ErrorAction SilentlyContinue }
+    if (Test-Path $cmd2) { Remove-Item -LiteralPath $cmd2 -Force -ErrorAction SilentlyContinue }
 
     Write-Host "Installation complete. Open the Desktop shortcut or run run_macro.bat to launch the macro."
     exit 0
