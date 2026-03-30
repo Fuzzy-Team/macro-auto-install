@@ -9,19 +9,38 @@ msg() {
     osascript -e "display dialog \"$1\" buttons {\"OK\"} default button \"OK\"" >/dev/null 2>&1 || true
 }
 
+choose_folder() {
+    osascript <<'APPLESCRIPT'
+try
+    tell application "Finder"
+        activate
+        set theFolder to choose folder with prompt "Select your Fuzzy Macro folder to update from commit."
+        return POSIX path of theFolder
+    end tell
+on error
+    return ""
+end try
+APPLESCRIPT
+}
+
 err_and_exit() {
     msg "$1"
     echo "$1" >&2
     exit 1
 }
 
-# Determine installation root similarly to update.py (cwd.replace('/src', '')).
-PWD_NOW="$(pwd)"
-if [[ "$PWD_NOW" == */src ]]; then
-    DESTINATION="${PWD_NOW%/src}"
-else
-    DESTINATION="$PWD_NOW"
-fi
+# Prompt for target folder (same UX style as migration script).
+DESTINATION=""
+while true; do
+    PICKED="$(choose_folder)"
+    PICKED="${PICKED%$'\n'}"
+    if [[ -z "$PICKED" ]]; then
+        msg "Please choose a folder to continue."
+        continue
+    fi
+    DESTINATION="${PICKED%/}"
+    break
+done
 
 if [[ ! -d "$DESTINATION" ]]; then
     err_and_exit "Invalid install directory: $DESTINATION"
@@ -39,6 +58,10 @@ APPLESCRIPT
 )
     COMMIT_HASH="${COMMIT_HASH%$'\n'}"
 fi
+
+# Normalize commit input and keep only the first hash-looking token.
+COMMIT_HASH="$(printf '%s' "$COMMIT_HASH" | tr -d '\r' | sed 's/^ *//; s/ *$//')"
+COMMIT_HASH="$(printf '%s' "$COMMIT_HASH" | grep -Eo '[0-9a-fA-F]{7,40}' | head -n1)"
 
 if [[ -z "$COMMIT_HASH" ]]; then
     err_and_exit "No commit hash provided. Update aborted."

@@ -10,8 +10,27 @@ function Write-Status {
     Write-Host "[update-from-commit] $Message"
 }
 
+function Select-MacroFolder {
+    Add-Type -AssemblyName System.Windows.Forms | Out-Null
+    $dialog = New-Object System.Windows.Forms.FolderBrowserDialog
+    $dialog.Description = 'Select your Fuzzy Macro folder to update from commit'
+    $dialog.ShowNewFolderButton = $false
+    $result = $dialog.ShowDialog()
+    if ($result -eq [System.Windows.Forms.DialogResult]::OK -and -not [string]::IsNullOrWhiteSpace($dialog.SelectedPath)) {
+        return $dialog.SelectedPath
+    }
+    return $null
+}
+
 if ([string]::IsNullOrWhiteSpace($CommitHash)) {
     $CommitHash = Read-Host 'Enter commit hash to install'
+}
+
+# Normalize commit input and keep only first hash-looking token.
+$CommitHash = (($CommitHash -replace "`r", '') -replace '^\s+|\s+$', '')
+$hashMatch = [regex]::Match($CommitHash, '[0-9a-fA-F]{7,40}')
+if ($hashMatch.Success) {
+    $CommitHash = $hashMatch.Value
 }
 
 if ([string]::IsNullOrWhiteSpace($CommitHash)) {
@@ -19,12 +38,13 @@ if ([string]::IsNullOrWhiteSpace($CommitHash)) {
     exit 1
 }
 
-# Match update.py behavior: cwd.replace('/src', '')
-$cwd = (Get-Location).Path
-if ($cwd -match '[\\/]src$') {
-    $destination = Split-Path -Path $cwd -Parent
-} else {
-    $destination = $cwd
+# Prompt user to choose target folder (same behavior intent as migration script).
+$destination = $null
+while ([string]::IsNullOrWhiteSpace($destination)) {
+    $destination = Select-MacroFolder
+    if ([string]::IsNullOrWhiteSpace($destination)) {
+        Write-Host 'Please choose a folder to continue.'
+    }
 }
 
 if (-not (Test-Path -LiteralPath $destination -PathType Container)) {
