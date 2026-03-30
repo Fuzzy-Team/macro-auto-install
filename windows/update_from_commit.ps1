@@ -22,6 +22,20 @@ function Select-MacroFolder {
     return $null
 }
 
+# Prompt user to choose target folder (same behavior intent as migration script).
+$destination = $null
+while ([string]::IsNullOrWhiteSpace($destination)) {
+    $destination = Select-MacroFolder
+    if ([string]::IsNullOrWhiteSpace($destination)) {
+        Write-Host 'Please choose a folder to continue.'
+    }
+}
+
+if (-not (Test-Path -LiteralPath $destination -PathType Container)) {
+    Write-Error "Invalid install directory: $destination"
+    exit 1
+}
+
 if ([string]::IsNullOrWhiteSpace($CommitHash)) {
     $CommitHash = Read-Host 'Enter commit hash to install'
 }
@@ -35,20 +49,6 @@ if ($hashMatch.Success) {
 
 if ([string]::IsNullOrWhiteSpace($CommitHash)) {
     Write-Error 'No commit hash provided. Update aborted.'
-    exit 1
-}
-
-# Prompt user to choose target folder (same behavior intent as migration script).
-$destination = $null
-while ([string]::IsNullOrWhiteSpace($destination)) {
-    $destination = Select-MacroFolder
-    if ([string]::IsNullOrWhiteSpace($destination)) {
-        Write-Host 'Please choose a folder to continue.'
-    }
-}
-
-if (-not (Test-Path -LiteralPath $destination -PathType Container)) {
-    Write-Error "Invalid install directory: $destination"
     exit 1
 }
 
