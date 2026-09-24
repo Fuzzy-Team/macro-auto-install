@@ -170,6 +170,7 @@ COPIED=false
 [[ -d "$SCRIPT_DIR/settings/profiles" ]] && cp -R "$SCRIPT_DIR/settings/profiles" "$BACKUP_DIR/" && COPIED=true
 [[ -d "$SCRIPT_DIR/settings/patterns" ]] && cp -R "$SCRIPT_DIR/settings/patterns" "$BACKUP_DIR/" && COPIED=true
 [[ -d "$SCRIPT_DIR/src/data/user" ]] && mkdir -p "$BACKUP_DIR/data" && cp -R "$SCRIPT_DIR/src/data/user" "$BACKUP_DIR/data/" && COPIED=true
+[[ -f "$SCRIPT_DIR/settings/generalsettings.txt" ]] && cp -p "$SCRIPT_DIR/settings/generalsettings.txt" "$BACKUP_DIR/" && COPIED=true
 
 if $COPIED; then
     gui "Backup created at:
@@ -186,6 +187,7 @@ TMP_ROOT="$(mktemp -d /tmp/fuzzy_migration.XXXXXX)"
 TMP_PROFILES="$TMP_ROOT/profiles"
 TMP_PATTERNS="$TMP_ROOT/patterns"
 TMP_USER_DATA="$TMP_ROOT/user"
+TMP_GENERAL_SETTINGS="$TMP_ROOT/generalsettings.txt"
 TMP_ZIP="$TMP_ROOT/fuzzy_macro.zip"
 TMP_EXTRACT="$TMP_ROOT/extract"
 
@@ -254,6 +256,9 @@ fi
 [[ -d "$SCRIPT_DIR/settings/profiles" ]] && cp -R "$SCRIPT_DIR/settings/profiles" "$TMP_PROFILES"
 [[ -d "$SCRIPT_DIR/settings/patterns" ]] && cp -R "$SCRIPT_DIR/settings/patterns" "$TMP_PATTERNS"
 [[ -d "$SCRIPT_DIR/src/data/user" ]] && cp -R "$SCRIPT_DIR/src/data/user" "$TMP_USER_DATA"
+# Existance keeps its general settings (hive slot, keybinds, webhook, ...) in one global file.
+# Fuzzy Macro copies it into every profile on first launch, then removes it.
+[[ -f "$SCRIPT_DIR/settings/generalsettings.txt" ]] && cp -p "$SCRIPT_DIR/settings/generalsettings.txt" "$TMP_GENERAL_SETTINGS"
 
 gui "Migrating files…
 
@@ -341,6 +346,7 @@ copy_dir_except_protected "$EXTRACTED_FOLDER" "$SCRIPT_DIR" ""
 # ---------- RESTORE DATA ----------
 [[ -d "$TMP_PROFILES" ]] && mkdir -p "$SCRIPT_DIR/settings" && cp -R "$TMP_PROFILES" "$SCRIPT_DIR/settings/"
 [[ -d "$TMP_USER_DATA" ]] && mkdir -p "$SCRIPT_DIR/src/data" && cp -R "$TMP_USER_DATA" "$SCRIPT_DIR/src/data/"
+[[ -f "$TMP_GENERAL_SETTINGS" ]] && mkdir -p "$SCRIPT_DIR/settings" && cp -p "$TMP_GENERAL_SETTINGS" "$SCRIPT_DIR/settings/generalsettings.txt"
 
 # Merge patterns: if file exists, save as .newN (like update.py)
 if [[ -d "$TMP_PATTERNS" ]]; then
