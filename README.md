@@ -1,11 +1,9 @@
 # How to install Fuzzy Macro
 
-## **WAIT**, before proceeding please note that this is not the up to date way to install the macro, please refer to the documentation below:
-https://fuzzy-team.gitbook.io/fuzzy-macro
+## **WAIT**, before proceeding please note that this is not how to install the macro, please refer to the documentation below:
+[https://www.fuzzymacro.com/docs](https://www.fuzzymacro.com/docs)
 
-This installer has been tested and works on Macos 26.2 M4 chip.
-
-In theory it should work with:
+This installer works with:
 
 - Macos 10.12+
 - All M1-4 chips
