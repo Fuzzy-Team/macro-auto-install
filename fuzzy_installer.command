@@ -59,12 +59,6 @@ else
     gui "Python 3 is already installed."
 fi
 
-# --- INSTALLER VENV SCRIPT ---
-gui "Running virtual environment setup..."
-
-bash -c "$(curl -fsSL https://raw.githubusercontent.com/Fuzzy-Team/Fuzzy-Macro/refs/heads/main/install_dependencies.command)"
-
-
 # --- DOWNLOAD MACRO ZIP (by latest tag) ---
 gui "Fetching latest Fuzzy Macro version..."
 
@@ -124,6 +118,17 @@ rm -rf "$inner"
 # Remove quarantine attributes (fix Permission denied on .so files)
 xattr -dr com.apple.quarantine "$APP_DIR"
 chmod -R +x "$APP_DIR"
+
+# --- INSTALLER VENV SCRIPT ---
+# Run the dependency installer from the release just downloaded, not from main. main can be
+# ahead of the latest release, and its installer removes packages the release still imports.
+gui "Running virtual environment setup..."
+
+if [[ ! -f "$APP_DIR/install_dependencies.command" ]]; then
+    gui "install_dependencies.command is missing from Fuzzy Macro $LATEST_VERSION. Aborting."
+    exit 1
+fi
+(cd "$APP_DIR" && bash "./install_dependencies.command")
 
 # --- DESKTOP SHORTCUT (Wrapper Script) ---
 gui "Creating a desktop shortcut for Fuzzy Macro..."

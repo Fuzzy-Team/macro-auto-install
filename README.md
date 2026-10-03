@@ -11,6 +11,6 @@ This installer works with:
 
 
 Installer Source Code: https://github.com/Fuzzy-Team/macro-auto-install/
- - Installer also runs this command from the Fuzzy-Macro repo: https://github.com/Fuzzy-Team/Fuzzy-Macro/blob/main/install_dependencies.command
+ - Installer then runs `install_dependencies.command` from the downloaded release, so the dependencies always match the installed version
 
 Macro Source Code: https://github.com/Fuzzy-Team/Fuzzy-Macro/tree/main
