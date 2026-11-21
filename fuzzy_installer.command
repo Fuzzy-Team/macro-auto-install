@@ -92,13 +92,42 @@ fetch_latest_non_prerelease_tag() {
     return 1
 }
 
-if ! LATEST_VERSION=$(fetch_latest_non_prerelease_tag); then
-    gui "Failed to fetch latest non-prerelease tag. Aborting."
-    exit 1
-fi
+# Newest pre-release, skipping non-version helper releases such as "_gh-imgup".
+fetch_latest_beta_tag() {
+    curl -fsSL "https://api.github.com/repos/Fuzzy-Team/Fuzzy-Macro/releases?per_page=100" |
+        awk '/"tag_name":/ { gsub(/.*: *"|",? *$/, ""); tag = $0 }
+             /"prerelease": *true/ && tag !~ /^_/ && !found { print tag; found = 1 }'
+}
+
+# Channel: stable (default), beta (newest pre-release), or main (latest commit).
+CHANNEL="${1:-stable}"
+case "$CHANNEL" in
+    stable)
+        if ! LATEST_VERSION=$(fetch_latest_non_prerelease_tag); then
+            gui "Failed to fetch latest non-prerelease tag. Aborting."
+            exit 1
+        fi
+        ZIP_URL="https://github.com/Fuzzy-Team/Fuzzy-Macro/archive/refs/tags/${LATEST_VERSION}.zip"
+        ;;
+    beta)
+        LATEST_VERSION=$(fetch_latest_beta_tag)
+        if [[ -z "$LATEST_VERSION" ]]; then
+            gui "Failed to find a beta release. Aborting."
+            exit 1
+        fi
+        ZIP_URL="https://github.com/Fuzzy-Team/Fuzzy-Macro/archive/refs/tags/${LATEST_VERSION}.zip"
+        ;;
+    main)
+        LATEST_VERSION="main"
+        ZIP_URL="https://github.com/Fuzzy-Team/Fuzzy-Macro/archive/refs/heads/main.zip"
+        ;;
+    *)
+        gui "Unknown channel \"$CHANNEL\". Use stable, beta or main."
+        exit 1
+        ;;
+esac
 
 gui "Downloading Fuzzy Macro version $LATEST_VERSION..."
-ZIP_URL="https://github.com/Fuzzy-Team/Fuzzy-Macro/archive/refs/tags/${LATEST_VERSION}.zip"
 curl -L -o "$TMP_ZIP" "$ZIP_URL"
 
 # --- SETUP USER FOLDER ---
