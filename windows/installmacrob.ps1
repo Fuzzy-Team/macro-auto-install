@@ -1,9 +1,9 @@
 Param()
 
-# Windows installer for Fuzzy Macro (windowsTest branch)
-# Downloads the `windowsTest` branch zip from GitHub, extracts to Downloads, and runs install_dependencies.bat
+# Windows installer for Fuzzy Macro (windows branch)
+# Downloads the `windows` branch zip from GitHub, extracts to Downloads, and runs install_dependencies.bat
 
-Write-Host "Fuzzy Macro Windows installer (windowsTest branch)"
+Write-Host "Fuzzy Macro Windows installer (windows branch)"
 
 try {
     $AppDir = Join-Path -Path $env:USERPROFILE -ChildPath "Downloads\Fuzzy Macro"
@@ -13,12 +13,12 @@ try {
     }
     New-Item -ItemType Directory -Path $AppDir | Out-Null
 
-    # Directly download the branch zip for windowsTest
-    $branch = 'windowsTest'
+    # Directly download the branch zip for the windows branch
+    $branch = 'windows'
     $zipUrl = "https://github.com/Fuzzy-Team/Fuzzy-Macro/archive/refs/heads/$branch.zip"
 
     Write-Host "Downloading $zipUrl"
-    $tmpZip = Join-Path -Path $env:TEMP -ChildPath "fuzzy_macro_windowsTest.zip"
+    $tmpZip = Join-Path -Path $env:TEMP -ChildPath "fuzzy_macro_windows.zip"
     Invoke-WebRequest -Uri $zipUrl -OutFile $tmpZip -UseBasicParsing
 
     Write-Host "Extracting to $AppDir"
@@ -86,7 +86,7 @@ try {
     # Create Desktop shortcut to run_macro.bat
     $runMacro = Join-Path -Path $AppDir -ChildPath 'run_macro.bat'
     if (Test-Path $runMacro) {
-        $desktopLnk = Join-Path -Path $env:USERPROFILE -ChildPath 'Desktop\Fuzzy Macro (windowsTest).lnk'
+        $desktopLnk = Join-Path -Path $env:USERPROFILE -ChildPath 'Desktop\Fuzzy Macro.lnk'
         $WshShell = New-Object -ComObject WScript.Shell
         $Shortcut = $WshShell.CreateShortcut($desktopLnk)
         $Shortcut.TargetPath = $runMacro
@@ -103,7 +103,7 @@ try {
     if (Test-Path $cmd1) { Remove-Item -LiteralPath $cmd1 -Force -ErrorAction SilentlyContinue }
     if (Test-Path $cmd2) { Remove-Item -LiteralPath $cmd2 -Force -ErrorAction SilentlyContinue }
 
-    Write-Host "Installation (windowsTest) complete. Open the Desktop shortcut or run run_macro.bat to launch the macro."
+    Write-Host "Installation complete. Open the Desktop shortcut or run run_macro.bat to launch the macro."
     exit 0
 }
 catch {

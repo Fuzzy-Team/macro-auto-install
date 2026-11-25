@@ -1,226 +1,163 @@
 #!/bin/bash
 
-# -------------------------------
-# Fuzzy Macro Installer
-# macOS 10.12+ / Intel or Apple Silicon (M1–M4)
-# -------------------------------
+# Fuzzy Macro installer for macOS 10.12+ (Intel and Apple Silicon).
+#
+#   fuzzy_installer.command [stable|beta|main]
+#
+#   stable  the newest GitHub release marked Latest (default)
+#   beta    the newest GitHub release, including pre-releases
+#   main    the latest commit on main
 
-# GUI helper
-gui() {
-    osascript -e "display dialog \"$1\" buttons {\"Continue\"} default button \"Continue\""
-}
-
-# --- REQUIREMENTS CHECK ---
-gui "Welcome to the Fuzzy Macro installer.\n\nClick Continue to run compatibility checks."
-
-# macOS version (require 10.12+)
-product_version=$(sw_vers -productVersion)
-major=$(echo "$product_version" | cut -d. -f1)
-minor=$(echo "$product_version" | cut -d. -f2)
-if [[ "$major" -ge 11 ]] || { [[ "$major" -eq 10 ]] && [[ -n "$minor" ]] && [[ "$minor" -ge 12 ]]; }; then
-    : # macOS version OK (10.12+ or 11+)
-else
-    osascript -e 'display dialog "This installer requires macOS 10.12 or later." buttons {"OK"}'
-    exit 1
-fi
-
-# Detect architecture (Intel or Apple Silicon)
-arch=$(uname -m)
-if [[ "$arch" == "arm64" ]]; then
-    ARCH="arm64"
-    gui "Detected Apple Silicon (arm64)."
-else
-    ARCH="x86_64"
-    gui "Detected Intel (x86_64)."
-fi
-
-# --- PYTHON CHECK ---
-gui "Checking for Python 3..."
-
-if ! command -v python3 >/dev/null 2>&1; then
-    gui "Python 3 is not installed. The installer will attempt to provide a suitable installer from python.org."
-
-    # For macOS 11+ we can use the macos11 universal installer; older 10.12-10.15 systems
-    # may not be compatible with the latest python.org pkg. In that case open the downloads page
-    # so the user can choose a compatible build.
-    if [[ "$major" -ge 11 ]]; then
-        PYTHON_PKG="python-latest.pkg"
-        curl -L -o "$PYTHON_PKG" "https://www.python.org/ftp/python/3.9.8/python-3.9.8-macos11.pkg"
-        sudo installer -pkg "$PYTHON_PKG" -target /
-        rm "$PYTHON_PKG"
-    # Install old python installer on old devices
-    else
-        PYTHON_PKG="python-latest.pkg"
-        curl -L -o "$PYTHON_PKG" "https://www.python.org/ftp/python/3.9.8/python-3.9.8-macosx10.9.pkg"
-        sudo installer -pkg "$PYTHON_PKG" -target /
-        rm "$PYTHON_PKG"
-    fi
-else
-    gui "Python 3 is already installed."
-fi
-
-# --- DOWNLOAD MACRO ZIP (by latest tag) ---
-gui "Fetching latest Fuzzy Macro version..."
-
-TMP_ZIP="/tmp/fuzzy_macro.zip"
-
-is_prerelease_tag() {
-    local tag="$1"
-    [[ "$tag" == *-* ]] && return 0
-    [[ "$tag" == *alpha* || "$tag" == *beta* || "$tag" == *rc* || "$tag" == *pre* ]] && return 0
-    return 1
-}
-
-fetch_latest_non_prerelease_tag() {
-    local release_api tags_api tag
-    release_api="https://api.github.com/repos/Fuzzy-Team/Fuzzy-Macro/releases/latest"
-    tag=$(curl -fsSL "$release_api" | sed -n 's/.*"tag_name":[[:space:]]*"\([^"]*\)".*/\1/p' | head -n1)
-    if [[ -n "$tag" ]] && ! is_prerelease_tag "$tag"; then
-        printf '%s' "$tag"
-        return 0
-    fi
-
-    tags_api="https://api.github.com/repos/Fuzzy-Team/Fuzzy-Macro/tags?per_page=100"
-    while read -r tag; do
-        [[ -z "$tag" ]] && continue
-        if ! is_prerelease_tag "$tag"; then
-            printf '%s' "$tag"
-            return 0
-        fi
-    done < <(curl -fsSL "$tags_api" | sed -n 's/.*"name":[[:space:]]*"\([^"]*\)".*/\1/p')
-
-    return 1
-}
-
-# Newest pre-release, skipping non-version helper releases such as "_gh-imgup".
-fetch_latest_beta_tag() {
-    curl -fsSL "https://api.github.com/repos/Fuzzy-Team/Fuzzy-Macro/releases?per_page=100" |
-        awk '/"tag_name":/ { gsub(/.*: *"|",? *$/, ""); tag = $0 }
-             /"prerelease": *true/ && tag !~ /^_/ && !found { print tag; found = 1 }'
-}
-
-# Channel: stable (default), beta (newest pre-release), or main (latest commit).
+REPO="Fuzzy-Team/Fuzzy-Macro"
+APP_DIR="$HOME/Downloads/Fuzzy Macro"
 CHANNEL="${1:-stable}"
+WORK_DIR=""
+
+# Temp files live next to the install so moving folders into place is a rename.
+cleanup() {
+    [[ -n "$WORK_DIR" ]] && rm -rf "$WORK_DIR"
+}
+trap cleanup EXIT
+
+say() {
+    printf '\033[1;35m%s\033[0m\n' "$1"
+}
+
+# One-button dialog. "\n" in a message is a new line.
+gui() {
+    local msg=${1//\"/\\\"}
+    osascript -e "display dialog \"$msg\" buttons {\"Continue\"} default button \"Continue\"" >/dev/null 2>&1 || true
+}
+
+fail() {
+    printf '\033[31;1m%s\033[0m\n' "$1" >&2
+    gui "$1"
+    exit 1
+}
+
+version_at_least() {
+    [ "$(printf '%s\n' "$1" "$2" | sort -V | head -n1)" = "$2" ]
+}
+
+# --- REQUIREMENTS ---
+os_ver=$(sw_vers -productVersion)
+if ! version_at_least "$os_ver" "10.12"; then
+    fail "Fuzzy Macro needs macOS 10.12 or later. You have $os_ver."
+fi
+if [[ "$(arch)" == "arm64" ]] && ! version_at_least "$os_ver" "13.0"; then
+    fail "Apple Silicon Macs need macOS 13 (Ventura) or later. You have $os_ver."
+fi
+
+# --- PICK THE VERSION ---
+release_tags() {
+    curl -fsSL --retry 2 "https://api.github.com/repos/$REPO/$1" |
+        sed -n 's/.*"tag_name": *"\([^"]*\)".*/\1/p'
+}
+
 case "$CHANNEL" in
     stable)
-        if ! LATEST_VERSION=$(fetch_latest_non_prerelease_tag); then
-            gui "Failed to fetch latest non-prerelease tag. Aborting."
-            exit 1
-        fi
-        ZIP_URL="https://github.com/Fuzzy-Team/Fuzzy-Macro/archive/refs/tags/${LATEST_VERSION}.zip"
+        VERSION=$(release_tags "releases/latest" | head -n1)
         ;;
     beta)
-        LATEST_VERSION=$(fetch_latest_beta_tag)
-        if [[ -z "$LATEST_VERSION" ]]; then
-            gui "Failed to find a beta release. Aborting."
-            exit 1
-        fi
-        ZIP_URL="https://github.com/Fuzzy-Team/Fuzzy-Macro/archive/refs/tags/${LATEST_VERSION}.zip"
+        # Releases come newest first. Skip non-version helper releases such as "_gh-imgup".
+        VERSION=$(release_tags "releases?per_page=30" | grep -v '^_' | head -n1)
         ;;
     main)
-        LATEST_VERSION="main"
-        ZIP_URL="https://github.com/Fuzzy-Team/Fuzzy-Macro/archive/refs/heads/main.zip"
+        VERSION="main"
         ;;
     *)
-        gui "Unknown channel \"$CHANNEL\". Use stable, beta or main."
-        exit 1
+        fail "Unknown channel \"$CHANNEL\". Use stable, beta or main."
         ;;
 esac
+[[ -n "$VERSION" ]] || fail "Could not find a Fuzzy Macro release on GitHub. Check your internet connection and try again."
 
-gui "Downloading Fuzzy Macro version $LATEST_VERSION..."
-curl -L -o "$TMP_ZIP" "$ZIP_URL"
-
-# --- SETUP USER FOLDER ---
-gui "Installing Fuzzy Macro into your downloads folder..."
-
-APP_DIR="$HOME/Downloads/Fuzzy Macro"
-rm -rf "$APP_DIR"
-mkdir -p "$APP_DIR"
-unzip -o "$TMP_ZIP" -d "$APP_DIR"
-rm "$TMP_ZIP"
-
-# Move inner folder up one level (tag zips use Fuzzy-Macro-$LATEST_VERSION)
-inner=$(find "$APP_DIR" -maxdepth 1 -type d -name "Fuzzy-Macro-*")
-mv "$inner"/* "$APP_DIR"
-rm -rf "$inner"
-
-# Remove quarantine attributes (fix Permission denied on .so files)
-xattr -dr com.apple.quarantine "$APP_DIR"
-chmod -R +x "$APP_DIR"
-
-# --- INSTALLER VENV SCRIPT ---
-# Run the dependency installer from the release just downloaded, not from main. main can be
-# ahead of the latest release, and its installer removes packages the release still imports.
-gui "Running virtual environment setup..."
-
-if [[ ! -f "$APP_DIR/install_dependencies.command" ]]; then
-    gui "install_dependencies.command is missing from Fuzzy Macro $LATEST_VERSION. Aborting."
-    exit 1
+if [[ "$VERSION" == "main" ]]; then
+    ZIP_URL="https://github.com/$REPO/archive/refs/heads/main.zip"
+else
+    ZIP_URL="https://github.com/$REPO/archive/refs/tags/$VERSION.zip"
 fi
-(cd "$APP_DIR" && bash "./install_dependencies.command")
 
-# --- DESKTOP SHORTCUT (Wrapper Script) ---
-gui "Creating a desktop shortcut for Fuzzy Macro..."
+# --- DOWNLOAD ---
+say "Downloading Fuzzy Macro $VERSION..."
+mkdir -p "$(dirname "$APP_DIR")"
+WORK_DIR=$(mktemp -d "$(dirname "$APP_DIR")/.fuzzy_install.XXXXXX") || fail "Could not create a temporary folder in $(dirname "$APP_DIR")."
 
+curl -fL --retry 3 --connect-timeout 20 -# -o "$WORK_DIR/macro.zip" "$ZIP_URL" ||
+    fail "Could not download Fuzzy Macro $VERSION. Check your internet connection and try again."
+unzip -q "$WORK_DIR/macro.zip" -d "$WORK_DIR/extract" || fail "Could not unzip the Fuzzy Macro download."
+
+# The zip holds one folder (Fuzzy-Macro-<version>).
+NEW_DIR=$(find "$WORK_DIR/extract" -mindepth 1 -maxdepth 1 -type d | head -n1)
+[[ -f "$NEW_DIR/install_dependencies.command" ]] ||
+    fail "install_dependencies.command is missing from Fuzzy Macro $VERSION."
+
+# --- INSTALL ---
+# An older install is moved to the Trash. Your profiles, patterns and data carry over.
+if [[ -d "$APP_DIR" ]]; then
+    say "Keeping your profiles, patterns and data from the existing install..."
+    for rel in settings/profiles src/data/user src/data/models; do
+        [[ -d "$APP_DIR/$rel" ]] || continue
+        rm -rf "$NEW_DIR/$rel"
+        mkdir -p "$(dirname "$NEW_DIR/$rel")"
+        mv "$APP_DIR/$rel" "$NEW_DIR/$rel"
+    done
+    # Patterns: keep yours and add the built-in ones you don't have yet.
+    if [[ -d "$APP_DIR/settings/patterns" ]]; then
+        cp -Rn "$NEW_DIR/settings/patterns/." "$APP_DIR/settings/patterns/" 2>/dev/null || true
+        rm -rf "$NEW_DIR/settings/patterns"
+        mv "$APP_DIR/settings/patterns" "$NEW_DIR/settings/patterns"
+    fi
+    mkdir -p "$HOME/.Trash"
+    mv "$APP_DIR" "$HOME/.Trash/Fuzzy Macro $(date +%Y%m%d-%H%M%S)"
+fi
+mv "$NEW_DIR" "$APP_DIR" || fail "Could not install Fuzzy Macro into $APP_DIR."
+
+# Downloads are quarantined, which blocks the .so files with "Permission denied".
+xattr -dr com.apple.quarantine "$APP_DIR" 2>/dev/null || true
+find "$APP_DIR" -type f \( -name "*.command" -o -name "*.sh" -o -name "*.so" -o -name "*.dylib" \) -exec chmod +x {} +
+
+# --- PYTHON AND LIBRARIES ---
+# install_dependencies.command installs the right Python for this Mac and sets up the libraries.
+# It comes from the release just downloaded, not main, so the libraries match the code.
+say "Installing Python and libraries..."
+(cd "$APP_DIR" && bash "./install_dependencies.command") ||
+    fail "Installing the libraries failed. Scroll up in Terminal to see the error, then run this installer again."
+
+# --- DESKTOP SHORTCUT ---
+say "Creating a desktop shortcut..."
 WRAPPER="$HOME/Desktop/Fuzzy Macro Shortcut.command"
-REAL_CMD="$APP_DIR/run_macro.command"
-
 cat > "$WRAPPER" <<EOF
 #!/bin/bash
-cd "$APP_DIR"
-chmod +x "$REAL_CMD"
-open -a Terminal "$REAL_CMD"
+chmod +x "$APP_DIR/run_macro.command"
+open -a Terminal "$APP_DIR/run_macro.command"
 EOF
-
 chmod +x "$WRAPPER"
 
-# --- DISPLAY COLOR PROFILE ---
-gui "Setting your display color profile to sRGB IEC61966-2.1..."
+# --- DISPLAY AND KEYBOARD ---
 defaults write com.apple.ColorSync CalibratorTargetProfile -string "sRGB IEC61966-2.1"
 
-# --- KEYBOARD LAYOUT ---
-gui "Setting keyboard input source to ABC..."
+if ! defaults read com.apple.HIToolbox AppleEnabledInputSources 2>/dev/null | grep -q 'KeyboardLayout Name" = "\{0,1\}ABC'; then
+    defaults write com.apple.HIToolbox AppleEnabledInputSources -array-add '{
+        InputSourceKind = "Keyboard Layout";
+        "KeyboardLayout ID" = 252;
+        "KeyboardLayout Name" = "ABC";
+    }'
+fi
 
-osascript <<EOF
-tell application "System Preferences"
-    reveal anchor "InputSources" of pane id "com.apple.preference.keyboard"
-end tell
-delay 1
-EOF
+# --- PERMISSIONS ---
+gui "Last step: Terminal permissions.\n\nSystem Settings will open four times. Each time, turn Terminal on (add it with + if it isn't listed), then click Continue."
 
-defaults write com.apple.HIToolbox AppleEnabledInputSources -array-add '{
-    InputSourceKind = "Keyboard Layout";
-    "KeyboardLayout ID" = 252;
-    "KeyboardLayout Name" = "ABC";
-}'
-
-# --- PERMISSIONS SECTION ---
-gui "Next step: Terminal permissions.\n\nSystem Settings will open for each category.\nPlease enable Terminal manually if needed."
-
-open_privacy() {
-    local page=$1
-    local title=$2
-    gui "Opening: $title\n\nEnable Terminal in this category if it appears."
-    open "x-apple.systempreferences:com.apple.preference.security?Privacy_$page"
-    sleep 3
+grant_permission() {
+    open "x-apple.systempreferences:com.apple.preference.security?Privacy_$1"
+    gui "Turn Terminal on under $2, then click Continue."
 }
 
-open_privacy "AllFiles" "Full Disk Access"
-open_privacy "Accessibility" "Accessibility"
-open_privacy "ScreenCapture" "Screen Recording"
-open_privacy "ListenEvent" "Input Monitoring"
-
-gui "Once you have enabled the permissions, click Continue."
+grant_permission "AllFiles" "Full Disk Access"
+grant_permission "Accessibility" "Accessibility"
+grant_permission "ScreenCapture" "Screen Recording"
+grant_permission "ListenEvent" "Input Monitoring"
 
 # --- DONE ---
-gui "Installation complete!\n\nYou can now launch the macro from the Desktop shortcut.\nIf Terminal prompts for permissions on first run, grant them."
-
-# Remove Windows batch files that are not needed on macOS installs
-if [[ -f "$APP_DIR/run_macro.bat" ]]; then
-    rm -f "$APP_DIR/run_macro.bat" || true
-fi
-if [[ -f "$APP_DIR/install_dependencies.bat" ]]; then
-    rm -f "$APP_DIR/install_dependencies.bat" || true
-fi
-
+gui "Fuzzy Macro $VERSION is installed.\n\nOpen it from the shortcut on your Desktop.\n\nBefore the first run, make sure your display color profile is sRGB IEC61966-2.1 and the ABC keyboard is selected. The docs show how: https://www.fuzzymacro.com/docs"
+echo "Fuzzy Macro $VERSION installed at $APP_DIR"
 exit 0

@@ -5,14 +5,22 @@
 
 This installer works with:
 
-- Macos 10.12+
-- All M1-4 chips
-- All Macs with an intel chip and Macos 10.12+
+- Intel Macs on macOS 10.12 or later
+- Apple Silicon Macs (M1 and newer) on macOS 13 or later
 
+The installer downloads the newest [GitHub release](https://github.com/Fuzzy-Team/Fuzzy-Macro/releases/latest), installs Python and the libraries with that release's own `install_dependencies.command`, and adds a shortcut to your Desktop. Running it again reinstalls the macro and keeps your profiles, patterns and data. The old folder goes to the Trash.
+
+## Scripts
+
+| Script | What it does |
+| --- | --- |
+| `fuzzy_installer.command` | Fresh install, or reinstall of the latest release |
+| `migrate_from_existance.command` | Move an Existance Macro folder to the latest release, or reinstall over an existing Fuzzy Macro folder, keeping profiles, patterns and data |
+| `update_from_commit.command` | Update or roll back to a specific commit or tester ID, keeping profiles, patterns and data |
 
 ## Test builds (macOS)
 
-Latest beta:
+Latest beta (the newest release, including pre-releases):
 
 ```
 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Fuzzy-Team/macro-auto-install/refs/heads/main/fuzzy_installer.command)" _ beta
@@ -25,6 +33,5 @@ Latest commit on `main`:
 ```
 
 Installer Source Code: https://github.com/Fuzzy-Team/macro-auto-install/
- - Installer then runs `install_dependencies.command` from the downloaded release, so the dependencies always match the installed version
 
 Macro Source Code: https://github.com/Fuzzy-Team/Fuzzy-Macro/tree/main
