@@ -187,50 +187,28 @@ TMP_ROOT="$(mktemp -d /tmp/fuzzy_migration.XXXXXX)"
 TMP_PROFILES="$TMP_ROOT/profiles"
 TMP_PATTERNS="$TMP_ROOT/patterns"
 TMP_USER_DATA="$TMP_ROOT/user"
+TMP_MODELS="$TMP_ROOT/models"
 TMP_GENERAL_SETTINGS="$TMP_ROOT/generalsettings.txt"
 TMP_ZIP="$TMP_ROOT/fuzzy_macro.zip"
 TMP_EXTRACT="$TMP_ROOT/extract"
 
 # ---------- DOWNLOAD ----------
 
-gui "Downloading Fuzzy Macro…"
+gui "Downloading the latest Fuzzy Macro release…"
 
-is_prerelease_tag() {
-    local tag="$1"
-    [[ "$tag" == *-* ]] && return 0
-    [[ "$tag" == *alpha* || "$tag" == *beta* || "$tag" == *rc* || "$tag" == *pre* ]] && return 0
-    return 1
-}
+# The newest GitHub release marked Latest. Never falls back to main, which can be unreleased.
+LATEST_VERSION=$(curl -fsSL --retry 2 "https://api.github.com/repos/Fuzzy-Team/Fuzzy-Macro/releases/latest" |
+    sed -n 's/.*"tag_name": *"\([^"]*\)".*/\1/p' | head -n1)
+if [[ -z "$LATEST_VERSION" ]]; then
+    gui_ok "ERROR: Could not find the latest Fuzzy Macro release on GitHub.
 
-fetch_latest_non_prerelease_tag() {
-    local release_api tags_api tag
-    release_api="https://api.github.com/repos/Fuzzy-Team/Fuzzy-Macro/releases/latest"
-    tag=$(curl -fsSL "$release_api" | sed -n 's/.*"tag_name":[[:space:]]*"\([^"]*\)".*/\1/p' | head -n1)
-    if [[ -n "$tag" ]] && ! is_prerelease_tag "$tag"; then
-        printf '%s' "$tag"
-        return 0
-    fi
-
-    tags_api="https://api.github.com/repos/Fuzzy-Team/Fuzzy-Macro/tags?per_page=100"
-    while read -r tag; do
-        [[ -z "$tag" ]] && continue
-        if ! is_prerelease_tag "$tag"; then
-            printf '%s' "$tag"
-            return 0
-        fi
-    done < <(curl -fsSL "$tags_api" | sed -n 's/.*"name":[[:space:]]*"\([^"]*\)".*/\1/p')
-
-    return 1
-}
-
-if LATEST_VERSION=$(fetch_latest_non_prerelease_tag); then
-    zip_url="https://github.com/Fuzzy-Team/Fuzzy-Macro/archive/refs/tags/${LATEST_VERSION}.zip"
-else
-    zip_url="https://github.com/Fuzzy-Team/Fuzzy-Macro/archive/refs/heads/main.zip"
+Check your internet connection and try again."
+    exit 1
 fi
+zip_url="https://github.com/Fuzzy-Team/Fuzzy-Macro/archive/refs/tags/${LATEST_VERSION}.zip"
 
-curl -L -o "$TMP_ZIP" --max-time 60 "$zip_url" || {
-    gui_ok "ERROR: Failed to download Fuzzy Macro from $zip_url"
+curl -fL --retry 3 --connect-timeout 20 -# -o "$TMP_ZIP" "$zip_url" || {
+    gui_ok "ERROR: Failed to download Fuzzy Macro $LATEST_VERSION from $zip_url"
     exit 1
 }
 
@@ -256,6 +234,8 @@ fi
 [[ -d "$SCRIPT_DIR/settings/profiles" ]] && cp -R "$SCRIPT_DIR/settings/profiles" "$TMP_PROFILES"
 [[ -d "$SCRIPT_DIR/settings/patterns" ]] && cp -R "$SCRIPT_DIR/settings/patterns" "$TMP_PATTERNS"
 [[ -d "$SCRIPT_DIR/src/data/user" ]] && cp -R "$SCRIPT_DIR/src/data/user" "$TMP_USER_DATA"
+# Downloaded AI models are large and not in the release zip, so move them aside instead of copying.
+[[ -d "$SCRIPT_DIR/src/data/models" ]] && mv "$SCRIPT_DIR/src/data/models" "$TMP_MODELS"
 # Existance keeps its general settings (hive slot, keybinds, webhook, ...) in one global file.
 # Fuzzy Macro copies it into every profile on first launch, then removes it.
 [[ -f "$SCRIPT_DIR/settings/generalsettings.txt" ]] && cp -p "$SCRIPT_DIR/settings/generalsettings.txt" "$TMP_GENERAL_SETTINGS"
@@ -265,11 +245,11 @@ gui "Migrating files…
 Your profiles will be preserved."
 
 # ---------- PROTECTED PATHS ----------
-# These match update.py's protected logic
 PROTECTED_FOLDERS=(
     "settings/profiles"
     "settings/patterns"
     "src/data/user"
+    "src/data/models"
 )
 PROTECTED_FILES=(
     ".git"
@@ -346,9 +326,10 @@ copy_dir_except_protected "$EXTRACTED_FOLDER" "$SCRIPT_DIR" ""
 # ---------- RESTORE DATA ----------
 [[ -d "$TMP_PROFILES" ]] && mkdir -p "$SCRIPT_DIR/settings" && cp -R "$TMP_PROFILES" "$SCRIPT_DIR/settings/"
 [[ -d "$TMP_USER_DATA" ]] && mkdir -p "$SCRIPT_DIR/src/data" && cp -R "$TMP_USER_DATA" "$SCRIPT_DIR/src/data/"
+[[ -d "$TMP_MODELS" ]] && mkdir -p "$SCRIPT_DIR/src/data" && mv "$TMP_MODELS" "$SCRIPT_DIR/src/data/models"
 [[ -f "$TMP_GENERAL_SETTINGS" ]] && mkdir -p "$SCRIPT_DIR/settings" && cp -p "$TMP_GENERAL_SETTINGS" "$SCRIPT_DIR/settings/generalsettings.txt"
 
-# Merge patterns: if file exists, save as .newN (like update.py)
+# Merge patterns: if file exists, save as .newN
 if [[ -d "$TMP_PATTERNS" ]]; then
     mkdir -p "$SCRIPT_DIR/settings/patterns"
     for item in "$TMP_PATTERNS"/*; do
@@ -373,7 +354,7 @@ if [[ -d "$TMP_PATTERNS" ]]; then
         [[ ! -e "$f" ]] && continue
         # Extract base and ext
         fname=$(basename "$f")
-        if [[ "$fname" =~ ^(.+?)\.new[0-9]+(\..+)?$ ]]; then
+        if [[ "$fname" =~ ^(.+)\.new[0-9]+(\..+)?$ ]]; then
             base="${BASH_REMATCH[1]}"
             ext="${BASH_REMATCH[2]}"
             [[ -z "$ext" ]] && ext=""
@@ -399,25 +380,18 @@ fi
 
 # ---------- PERMISSIONS ----------
 
-find "$SCRIPT_DIR" -type f \( -name "*.command" -o -name "*.sh" \) -exec chmod +x {} +
+find "$SCRIPT_DIR" -type f \( -name "*.command" -o -name "*.sh" -o -name "*.so" -o -name "*.dylib" \) -exec chmod +x {} +
 xattr -dr com.apple.quarantine "$SCRIPT_DIR" 2>/dev/null || true
 
 # ---------- DEPENDENCIES ----------
 
 if [[ -f "$SCRIPT_DIR/install_dependencies.command" ]]; then
     if gui_yes_no "Run Fuzzy Macro dependency installer now?"; then
-        (cd "$SCRIPT_DIR" && bash "./install_dependencies.command")
+        (cd "$SCRIPT_DIR" && bash "./install_dependencies.command") ||
+            gui_ok "Installing the libraries failed. Scroll up in Terminal to see the error, then run install_dependencies.command again."
     else
         gui_ok "Dependencies not installed. Run install_dependencies.command manually later."
     fi
-fi
-
-# On macOS, remove any leftover Windows batch helpers from the migrated folder
-if [[ -f "$SCRIPT_DIR/run_macro.bat" ]]; then
-    rm -f "$SCRIPT_DIR/run_macro.bat" || true
-fi
-if [[ -f "$SCRIPT_DIR/install_dependencies.bat" ]]; then
-    rm -f "$SCRIPT_DIR/install_dependencies.bat" || true
 fi
 
 # ---------- CLEANUP ----------

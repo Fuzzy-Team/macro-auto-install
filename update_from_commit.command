@@ -1,26 +1,15 @@
 #!/bin/bash
 
-# Update an existing Fuzzy Macro install from a specific commit hash.
-# Mirrors src/modules/misc/update.py:update_from_commit behavior.
+# Update (or roll back) an existing Fuzzy Macro install to a specific commit or tester ID.
+#
+#   update_from_commit.command [commit-hash]
+#
+# Your profiles, patterns, user data and AI models are left alone.
 
 set -u
 
 msg() {
     osascript -e "display dialog \"$1\" buttons {\"OK\"} default button \"OK\"" >/dev/null 2>&1 || true
-}
-
-choose_folder() {
-    osascript <<'APPLESCRIPT'
-try
-    tell application "Finder"
-        activate
-        set theFolder to choose folder with prompt "Select your Fuzzy Macro folder to update from commit."
-        return POSIX path of theFolder
-    end tell
-on error
-    return ""
-end try
-APPLESCRIPT
 }
 
 err_and_exit() {
@@ -29,197 +18,104 @@ err_and_exit() {
     exit 1
 }
 
-# Prompt for target folder (same UX style as migration script).
-DESTINATION=""
-while true; do
-    PICKED="$(choose_folder)"
-    PICKED="${PICKED%$'\n'}"
-    if [[ -z "$PICKED" ]]; then
-        msg "Please choose a folder to continue."
-        continue
-    fi
-    DESTINATION="${PICKED%/}"
-    break
-done
+# Opens on the default install folder when it exists. Prints nothing if cancelled.
+choose_folder() {
+    local default="$HOME/Downloads/Fuzzy Macro"
+    [[ -d "$default" ]] || default="$HOME/Downloads"
+    osascript - "$default" <<'APPLESCRIPT' 2>/dev/null
+on run argv
+    tell application "Finder"
+        activate
+        set theFolder to choose folder with prompt "Select your Fuzzy Macro folder to update." default location (POSIX file (item 1 of argv) as alias)
+        return POSIX path of theFolder
+    end tell
+end run
+APPLESCRIPT
+}
 
-if [[ ! -d "$DESTINATION" ]]; then
-    err_and_exit "Invalid install directory: $DESTINATION"
+PICKED="$(choose_folder)"
+DESTINATION="${PICKED%$'\n'}"
+DESTINATION="${DESTINATION%/}"
+[[ -n "$DESTINATION" ]] || err_and_exit "No folder chosen. Update cancelled."
+
+# Refuse anything that is not a Fuzzy Macro folder, since files are copied into it.
+if [[ ! -f "$DESTINATION/run_macro.command" || ! -d "$DESTINATION/src" ]]; then
+    err_and_exit "This does not look like a Fuzzy Macro folder: $DESTINATION"
 fi
 
 COMMIT_HASH="${1:-}"
 if [[ -z "$COMMIT_HASH" ]]; then
-    COMMIT_HASH=$(osascript <<'APPLESCRIPT'
+    COMMIT_HASH=$(osascript <<'APPLESCRIPT' 2>/dev/null
 try
-    text returned of (display dialog "Enter commit hash to install:" default answer "" buttons {"Cancel", "Update"} default button "Update")
+    text returned of (display dialog "Enter the commit hash or tester ID to install:" default answer "" buttons {"Cancel", "Update"} default button "Update")
 on error
     return ""
 end try
 APPLESCRIPT
 )
-    COMMIT_HASH="${COMMIT_HASH%$'\n'}"
 fi
 
-# Normalize commit input and keep only the first hash-looking token.
-COMMIT_HASH="$(printf '%s' "$COMMIT_HASH" | tr -d '\r' | sed 's/^ *//; s/ *$//')"
+# Keep only the first hash-looking token.
 COMMIT_HASH="$(printf '%s' "$COMMIT_HASH" | grep -Eo '[0-9a-fA-F]{7,40}' | head -n1)"
-
-if [[ -z "$COMMIT_HASH" ]]; then
-    err_and_exit "No commit hash provided. Update aborted."
-fi
-
-PROTECTED_FOLDERS=(
-    "src/data/user"
-    "settings/profiles"
-    "settings/patterns"
-)
-PROTECTED_FILES=(
-    ".git"
-)
-
-BACKUP_PATH="$DESTINATION/backup_macro.zip"
-MARKER_PATH="$DESTINATION/.backup_pending"
-REMOTE_ZIP="https://github.com/Fuzzy-Team/Fuzzy-Macro/archive/${COMMIT_HASH}.zip"
-
-msg "Update in progress to commit ${COMMIT_HASH}. Do not close terminal."
-
-# Create backup excluding protected folders/files.
-(
-    cd "$DESTINATION" || exit 1
-    rm -f "$BACKUP_PATH"
-
-    ZIP_EXCLUDES=(
-        "src/data/user/*"
-        "settings/profiles/*"
-        "settings/patterns/*"
-        ".git"
-        ".git/*"
-        "backup_macro.zip"
-    )
-
-    zip -r "$BACKUP_PATH" . -x "${ZIP_EXCLUDES[@]}" >/dev/null 2>&1 || true
-)
-
-echo "1" > "$MARKER_PATH" 2>/dev/null || true
+[[ -n "$COMMIT_HASH" ]] || err_and_exit "No commit hash provided. Update cancelled."
 
 TMP_ROOT="$(mktemp -d /tmp/fuzzy_update_commit.XXXXXX)"
+trap 'rm -rf "$TMP_ROOT"' EXIT
 TMP_ZIP="$TMP_ROOT/update.zip"
 TMP_EXTRACT="$TMP_ROOT/extract"
-mkdir -p "$TMP_EXTRACT"
 
-cleanup_tmp() {
-    rm -rf "$TMP_ROOT" >/dev/null 2>&1 || true
-}
-trap cleanup_tmp EXIT
+# Download first, so a failed download leaves the install untouched.
+echo "Downloading ${COMMIT_HASH}..."
+curl -fL --retry 3 --connect-timeout 20 --max-time 600 -# -o "$TMP_ZIP" \
+    "https://github.com/Fuzzy-Team/Fuzzy-Macro/archive/${COMMIT_HASH}.zip" ||
+    err_and_exit "Could not download commit ${COMMIT_HASH}. Check the hash and your internet connection."
+unzip -q "$TMP_ZIP" -d "$TMP_EXTRACT" || err_and_exit "Could not unzip commit ${COMMIT_HASH}."
 
-# Download zip for target commit.
-if ! curl -L --fail --max-time 90 -o "$TMP_ZIP" "$REMOTE_ZIP"; then
-    err_and_exit "Could not download update zip for commit ${COMMIT_HASH}."
+# The zip holds one folder (Fuzzy-Macro-<hash>).
+EXTRACTED="$(find "$TMP_EXTRACT" -mindepth 1 -maxdepth 1 -type d | head -n1)"
+[[ -d "$EXTRACTED/src" ]] || err_and_exit "Commit ${COMMIT_HASH} does not contain a Fuzzy Macro."
+
+# Back up the code. Your data is not included, and neither are the AI models and recordings, which are huge.
+# The macro deletes this backup after one full launch.
+BACKUP_PATH="$DESTINATION/backup_macro.zip"
+echo "Backing up the current version..."
+rm -f "$BACKUP_PATH"
+if (cd "$DESTINATION" && zip -rq "$BACKUP_PATH" . \
+        -x "src/data/user/*" "src/data/models/*" "settings/profiles/*" "settings/patterns/*" \
+        ".git" ".git/*" "backup_macro.zip"); then
+    echo "1" > "$DESTINATION/.backup_pending"
+else
+    rm -f "$BACKUP_PATH"
+    echo "Backup failed. Continuing without one." >&2
 fi
 
-if ! unzip -q "$TMP_ZIP" -d "$TMP_EXTRACT"; then
-    err_and_exit "Could not extract update zip for commit ${COMMIT_HASH}."
-fi
-
-EXTRACTED=""
-for d in "$TMP_EXTRACT"/Fuzzy-Macro*; do
-    if [[ -d "$d" ]]; then
-        EXTRACTED="$d"
-        break
-    fi
-done
-
-if [[ -z "$EXTRACTED" ]]; then
-    # Fallback: any extracted directory containing src.
-    for d in "$TMP_EXTRACT"/*; do
-        if [[ -d "$d" && -d "$d/src" ]]; then
-            EXTRACTED="$d"
-            break
-        fi
-    done
-fi
-
-if [[ -z "$EXTRACTED" ]]; then
-    err_and_exit "Could not locate extracted update folder."
-fi
-
-# Merge all files except protected folders/files.
-if ! rsync -a \
+# Copy the new version over the install. Protected folders are left as they are.
+echo "Applying update..."
+rsync -a \
     --exclude "src/data/user/***" \
+    --exclude "src/data/models/***" \
     --exclude "settings/profiles/***" \
     --exclude "settings/patterns/***" \
     --exclude ".git" \
-    "$EXTRACTED/" "$DESTINATION/"; then
-    err_and_exit "Error while applying update files."
+    "$EXTRACTED/" "$DESTINATION/" || err_and_exit "Error while applying the update files."
+
+# Patterns: keep yours and add the built-in ones you don't have yet.
+if [[ -d "$EXTRACTED/settings/patterns" ]]; then
+    mkdir -p "$DESTINATION/settings/patterns"
+    rsync -a --ignore-existing "$EXTRACTED/settings/patterns/" "$DESTINATION/settings/patterns/"
 fi
 
-# Merge patterns without overwriting existing files.
-SRC_PATTERNS="$EXTRACTED/settings/patterns"
-DST_PATTERNS="$DESTINATION/settings/patterns"
-if [[ -d "$SRC_PATTERNS" ]]; then
-    while IFS= read -r -d '' src_file; do
-        rel_path="${src_file#$SRC_PATTERNS/}"
-        dest_file="$DST_PATTERNS/$rel_path"
-        dest_dir="$(dirname "$dest_file")"
-        mkdir -p "$dest_dir"
+find "$DESTINATION" -type f \( -name "*.command" -o -name "*.sh" -o -name "*.so" -o -name "*.dylib" \) -exec chmod +x {} + 2>/dev/null
 
-        if [[ ! -f "$dest_file" ]]; then
-            cp -f "$src_file" "$dest_file" >/dev/null 2>&1 || true
-        else
-            base_name="$(basename "$dest_file")"
-            name="${base_name%.*}"
-            ext=""
-            if [[ "$base_name" == *.* ]]; then
-                ext=".${base_name##*.}"
-            fi
-            if [[ "$name" == "$base_name" ]]; then
-                ext=""
-            fi
-            i=1
-            while true; do
-                new_name="${name}.new${i}${ext}"
-                new_path="$dest_dir/$new_name"
-                if [[ ! -e "$new_path" ]]; then
-                    cp -f "$src_file" "$new_path" >/dev/null 2>&1 || true
-                    break
-                fi
-                i=$((i + 1))
-            done
-        fi
-    done < <(find "$SRC_PATTERNS" -type f -print0)
+# The macro shows this commit in its settings.
+mkdir -p "$DESTINATION/src/webapp"
+printf '%s' "${COMMIT_HASH:0:7}" > "$DESTINATION/src/webapp/updated_commit.txt"
 
-    # Cleanup .newN duplicates similarly to update.py.
-    while IFS= read -r -d '' candidate; do
-        fname="$(basename "$candidate")"
-        dirn="$(dirname "$candidate")"
-        if [[ "$fname" =~ ^(.+)\.new[0-9]+(\..+)?$ ]]; then
-            base_part="${BASH_REMATCH[1]}"
-            ext_part="${BASH_REMATCH[2]:-}"
-            target="$dirn/${base_part}${ext_part}"
-            if [[ -e "$target" ]]; then
-                rm -f "$candidate" >/dev/null 2>&1 || true
-            else
-                mv -f "$candidate" "$target" >/dev/null 2>&1 || true
-            fi
-        fi
-    done < <(find "$DST_PATTERNS" -type f -name "*.new*" -print0)
-fi
-
-# Ensure run script is executable.
-RUN_MACRO="$DESTINATION/run_macro.command"
-if [[ -f "$RUN_MACRO" ]]; then
-    chmod +x "$RUN_MACRO" >/dev/null 2>&1 || true
-fi
-
-# Write commit marker so UI can show commit hash.
-COMMIT_MARKER="$DESTINATION/src/webapp/updated_commit.txt"
-mkdir -p "$(dirname "$COMMIT_MARKER")" >/dev/null 2>&1 || true
-printf '%s' "${COMMIT_HASH:0:7}" > "$COMMIT_MARKER" 2>/dev/null || true
-
-# Attempt to run dependency installer in detached mode.
-INSTALL_SCRIPT="$DESTINATION/install_dependencies.command"
-if [[ -f "$INSTALL_SCRIPT" ]]; then
-    chmod +x "$INSTALL_SCRIPT" >/dev/null 2>&1 || true
-    nohup sh "$INSTALL_SCRIPT" >/dev/null 2>&1 < /dev/null &
+# The libraries can differ between versions.
+if [[ -f "$DESTINATION/install_dependencies.command" ]]; then
+    echo "Updating libraries..."
+    (cd "$DESTINATION" && bash "./install_dependencies.command") ||
+        err_and_exit "The code was updated, but installing the libraries failed. Scroll up in Terminal to see the error, then run install_dependencies.command in your Fuzzy Macro folder."
 fi
 
 msg "Update complete. You can now relaunch the macro."
