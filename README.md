@@ -32,6 +32,12 @@ Latest commit on `main`:
 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Fuzzy-Team/macro-auto-install/refs/heads/main/fuzzy_installer.command)" _ main
 ```
 
+The migrate script takes the same argument, so a test build over an Existance or Fuzzy Macro folder is:
+
+```
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Fuzzy-Team/macro-auto-install/refs/heads/main/migrate_from_existance.command)" _ main
+```
+
 Installer Source Code: https://github.com/Fuzzy-Team/macro-auto-install/
 
 Macro Source Code: https://github.com/Fuzzy-Team/Fuzzy-Macro/tree/main

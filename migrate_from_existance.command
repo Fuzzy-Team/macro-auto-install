@@ -3,10 +3,17 @@
 # ---------------------------------------------
 # Existance → Fuzzy Macro Migration Script
 # macOS 10.12+ / Intel or Apple Silicon
-# ---------------------------------------------
+#
+#   migrate_from_existance.command [stable|beta|main]
+#
+#   stable  the newest GitHub release marked Latest (default)
+#   beta    the newest GitHub release, including pre-releases
+#   main    the latest commit on main
 
 set -euo pipefail
 IFS=$'\n\t'
+
+CHANNEL="${1:-stable}"
 
 # ---------- GUI HELPERS ----------
 
@@ -194,18 +201,42 @@ TMP_EXTRACT="$TMP_ROOT/extract"
 
 # ---------- DOWNLOAD ----------
 
-gui "Downloading the latest Fuzzy Macro release…"
+gui "Downloading Fuzzy Macro…"
 
-# The newest GitHub release marked Latest. Never falls back to main, which can be unreleased.
-LATEST_VERSION=$(curl -fsSL --retry 2 "https://api.github.com/repos/Fuzzy-Team/Fuzzy-Macro/releases/latest" |
-    sed -n 's/.*"tag_name": *"\([^"]*\)".*/\1/p' | head -n1)
+release_tags() {
+    curl -fsSL --retry 2 "https://api.github.com/repos/Fuzzy-Team/Fuzzy-Macro/$1" |
+        sed -n 's/.*"tag_name": *"\([^"]*\)".*/\1/p'
+}
+
+# stable never falls back to main, which can be unreleased. "|| true" keeps a failed lookup
+# from ending the script before the error dialog below.
+case "$CHANNEL" in
+    stable)
+        LATEST_VERSION=$(release_tags "releases/latest" | head -n1) || true
+        ;;
+    beta)
+        # Releases come newest first. Skip non-version helper releases such as "_gh-imgup".
+        LATEST_VERSION=$(release_tags "releases?per_page=30" | grep -v '^_' | head -n1) || true
+        ;;
+    main)
+        LATEST_VERSION="main"
+        ;;
+    *)
+        gui_ok "ERROR: Unknown channel \"$CHANNEL\". Use stable, beta or main."
+        exit 1
+        ;;
+esac
 if [[ -z "$LATEST_VERSION" ]]; then
-    gui_ok "ERROR: Could not find the latest Fuzzy Macro release on GitHub.
+    gui_ok "ERROR: Could not find a Fuzzy Macro release on GitHub.
 
 Check your internet connection and try again."
     exit 1
 fi
-zip_url="https://github.com/Fuzzy-Team/Fuzzy-Macro/archive/refs/tags/${LATEST_VERSION}.zip"
+if [[ "$LATEST_VERSION" == "main" ]]; then
+    zip_url="https://github.com/Fuzzy-Team/Fuzzy-Macro/archive/refs/heads/main.zip"
+else
+    zip_url="https://github.com/Fuzzy-Team/Fuzzy-Macro/archive/refs/tags/${LATEST_VERSION}.zip"
+fi
 
 curl -fL --retry 3 --connect-timeout 20 -# -o "$TMP_ZIP" "$zip_url" || {
     gui_ok "ERROR: Failed to download Fuzzy Macro $LATEST_VERSION from $zip_url"
